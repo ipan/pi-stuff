@@ -1,0 +1,12 @@
+# Dependencies (peer deps are provided by pi; keep this clean)
+node_modules/
+
+# Build artifacts
+*.tsbuildinfo
+*.log
+
+# OS / editor cruft
+.DS_Store
+
+# pi project-local overrides (kept separate from the package itself)
+.pi/
