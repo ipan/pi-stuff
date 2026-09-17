@@ -23,16 +23,26 @@ import {
 	type OverlayHandle,
 	type TUI,
 } from "@earendil-works/pi-tui";
+import { getBtwTools } from "./btw-tools.mjs";
 
 const BTW_ENTRY_TYPE = "btw-thread-entry";
 const BTW_RESET_TYPE = "btw-thread-reset";
 
+// /btw is read-only; use /btw-edit when file changes are explicitly requested.
+const BTW_MAX_CONTEXT_MESSAGES = 80;
+
 const BTW_SYSTEM_PROMPT = [
 	"You are BTW, a side-channel assistant embedded in the user's coding agent.",
 	"You have access to the main conversation context — use it to give informed answers.",
-	"Help with focused questions, planning, and quick explorations.",
-	"Be direct and practical.",
+	"Help with focused questions, planning, debugging, and quick explorations.",
+	"Be direct, concise, and practical.",
+	"Do not modify files or run destructive commands unless the user explicitly asks.",
+	"Prefer inspecting the repository before making technical claims.",
+	"Clearly distinguish verified facts from assumptions.",
 ].join(" ");
+
+const BTW_EDIT_PROMPT =
+	"You are in BTW edit mode. Modify files only when explicitly requested, inspect them first, and avoid destructive commands.";
 
 const BTW_SUMMARY_PROMPT =
 	"Summarize this side conversation for handoff into the main conversation. Keep key decisions, findings, risks, and next actions. Output only the summary.";
@@ -142,7 +152,8 @@ function buildSeedMessages(ctx: ExtensionContext, thread: BtwDetails[]): Message
 
 	try {
 		const contextMessages = buildSessionContext(ctx.sessionManager.getEntries(), ctx.sessionManager.getLeafId()).messages;
-		seed.push(...(contextMessages.filter((message) => "role" in message) as Message[]));
+		const usableContext = contextMessages.filter((message) => "role" in message) as Message[];
+		seed.push(...usableContext.slice(-BTW_MAX_CONTEXT_MESSAGES));
 	} catch {
 		// Ignore context seed failures and continue with an empty side thread.
 	}
@@ -324,6 +335,7 @@ export default function (pi: ExtensionAPI) {
 	let sideBusy = false;
 	let overlayStatus = "Ready";
 	let overlayDraft = "";
+	let overlayAllowEdits = false;
 	let overlayRuntime: OverlayRuntime | null = null;
 	let activeSideSession: SideSessionRuntime | null = null;
 	let overlayRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -549,7 +561,7 @@ export default function (pi: ExtensionAPI) {
 		syncOverlay();
 	}
 
-	async function createSideSession(ctx: ExtensionCommandContext): Promise<SideSessionRuntime | null> {
+	async function createSideSession(ctx: ExtensionCommandContext, allowEdits: boolean): Promise<SideSessionRuntime | null> {
 		if (!ctx.model) {
 			return null;
 		}
@@ -559,8 +571,8 @@ export default function (pi: ExtensionAPI) {
 			model: ctx.model,
 			modelRegistry: ctx.modelRegistry as AgentSession["modelRegistry"],
 			thinkingLevel: pi.getThinkingLevel() as SessionThinkingLevel,
-			tools: ["read", "bash", "edit", "write"],
-			resourceLoader: createBtwResourceLoader(ctx),
+			tools: getBtwTools(allowEdits),
+			resourceLoader: createBtwResourceLoader(ctx, allowEdits ? [BTW_SYSTEM_PROMPT, BTW_EDIT_PROMPT] : [BTW_SYSTEM_PROMPT]),
 		});
 
 		const seedMessages = buildSeedMessages(ctx, thread);
@@ -622,27 +634,28 @@ export default function (pi: ExtensionAPI) {
 
 		return {
 			session,
-			modelKey: getModelKey(ctx),
+			modelKey: `${getModelKey(ctx)}:${allowEdits ? "edit" : "read"}`,
 			unsubscribe,
 		};
 	}
 
-	async function ensureSideSession(ctx: ExtensionCommandContext): Promise<SideSessionRuntime | null> {
+	async function ensureSideSession(ctx: ExtensionCommandContext, allowEdits: boolean): Promise<SideSessionRuntime | null> {
 		if (!ctx.model) {
 			return null;
 		}
 
-		const expectedModelKey = getModelKey(ctx);
+		const expectedModelKey = `${getModelKey(ctx)}:${allowEdits ? "edit" : "read"}`;
 		if (activeSideSession && activeSideSession.modelKey === expectedModelKey) {
 			return activeSideSession;
 		}
 
 		await disposeSideSession();
-		activeSideSession = await createSideSession(ctx);
+		activeSideSession = await createSideSession(ctx, allowEdits);
 		return activeSideSession;
 	}
 
-	async function ensureOverlay(ctx: ExtensionCommandContext | ExtensionContext): Promise<void> {
+	async function ensureOverlay(ctx: ExtensionCommandContext | ExtensionContext, allowEdits = false): Promise<void> {
+		overlayAllowEdits = allowEdits;
 		if (!ctx.hasUI) {
 			return;
 		}
@@ -815,7 +828,7 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	async function runBtwPrompt(ctx: ExtensionCommandContext, question: string): Promise<void> {
+	async function runBtwPrompt(ctx: ExtensionCommandContext, question: string, allowEdits = false): Promise<void> {
 		const model = ctx.model;
 		if (!model) {
 			setOverlayStatus("No active model selected.");
@@ -836,7 +849,7 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		const side = await ensureSideSession(ctx);
+		const side = await ensureSideSession(ctx, allowEdits);
 		if (!side) {
 			notify(ctx, "Unable to create BTW side session.", "error");
 			return;
@@ -901,45 +914,56 @@ export default function (pi: ExtensionAPI) {
 
 		setOverlayDraft("");
 		if (!("waitForIdle" in ctx)) {
-			setOverlayStatus("BTW submit requires command context. Re-open with /btw.");
+			setOverlayStatus("BTW submit requires command context. Re-open with /btw or /btw-edit.");
 			return;
 		}
 
-		await runBtwPrompt(ctx, question);
+		await runBtwPrompt(ctx, question, overlayAllowEdits);
+	}
+
+	async function handleBtwCommand(args: string, ctx: ExtensionCommandContext, allowEdits: boolean): Promise<void> {
+		overlayAllowEdits = allowEdits;
+		const question = args.trim();
+
+		if (!question) {
+			if (thread.length > 0 && ctx.hasUI) {
+				const choice = await ctx.ui.select("BTW side chat:", [
+					"Continue previous conversation",
+					"Start fresh",
+				]);
+				if (choice === "Continue previous conversation") {
+					await disposeSideSession();
+					setOverlayStatus(allowEdits ? "Continuing BTW edit thread." : "Continuing BTW thread.");
+					await ensureOverlay(ctx, allowEdits);
+				} else if (choice === "Start fresh") {
+					await resetThread(ctx, true);
+					setOverlayStatus(allowEdits ? "Ready in BTW edit mode." : "Ready");
+					await ensureOverlay(ctx, allowEdits);
+				}
+				return;
+			}
+
+			await resetThread(ctx, true);
+			setOverlayStatus(allowEdits ? "Ready in BTW edit mode." : "Ready");
+			await ensureOverlay(ctx, allowEdits);
+			return;
+		}
+
+		await ensureOverlay(ctx, allowEdits);
+		await runBtwPrompt(ctx, question, allowEdits);
 	}
 
 	pi.registerCommand("btw", {
 		description: "Open a simple BTW side-chat popover. `/btw <text>` asks immediately, `/btw` opens the side thread.",
 		handler: async (args, ctx) => {
-			const question = args.trim();
+			await handleBtwCommand(args, ctx, false);
+		},
+	});
 
-			if (!question) {
-				if (thread.length > 0 && ctx.hasUI) {
-					const choice = await ctx.ui.select("BTW side chat:", [
-						"Continue previous conversation",
-						"Start fresh",
-					]);
-					if (choice === "Continue previous conversation") {
-						// Dispose session so it's recreated with fresh main context on next submit
-						await disposeSideSession();
-						setOverlayStatus("Continuing BTW thread.");
-						await ensureOverlay(ctx);
-					} else if (choice === "Start fresh") {
-						await resetThread(ctx, true);
-						setOverlayStatus("Ready");
-						await ensureOverlay(ctx);
-					}
-					// null = user cancelled (Esc), do nothing
-				} else {
-					await resetThread(ctx, true);
-					setOverlayStatus("Ready");
-					await ensureOverlay(ctx);
-				}
-				return;
-			}
-
-			await ensureOverlay(ctx);
-			await runBtwPrompt(ctx, question);
+	pi.registerCommand("btw-edit", {
+		description: "Open BTW side chat with explicit file-editing access. Use only when changes are requested.",
+		handler: async (args, ctx) => {
+			await handleBtwCommand(args, ctx, true);
 		},
 	});
 
