@@ -5,7 +5,7 @@ description: "Trigger native web search. Use when you need quick internet resear
 
 # Native Web Search
 
-Use this skill to run a **fast model with native web search enabled** and get a concise research summary with explicit full URLs.
+Use this skill to run a **fast OpenAI or Anthropic model with web search enabled** and get a concise research summary with explicit full URLs.
 
 ## Script
 
@@ -32,6 +32,14 @@ Optional flags:
 - `--model <model-id>`
 - `--timeout <ms>`
 - `--json`
+
+Environment overrides:
+
+- `NATIVE_WEB_SEARCH_PROVIDER` — preferred provider (`openai-codex` or `anthropic`)
+- `NATIVE_WEB_SEARCH_MODEL` — preferred model ID
+- `PI_CODING_AGENT_DIR` — Pi directory containing `auth.json` and `settings.json`
+
+The provider/model precedence is: command-line argument, environment override, `settings.json` (`nativeWebSearchProvider` / `nativeWebSearchModel`), then automatic provider/model selection.
 
 ## Output expectations
 

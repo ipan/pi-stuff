@@ -5,6 +5,7 @@ import { spawnSync, execSync } from "child_process";
 import { homedir } from "os";
 import { dirname, isAbsolute, join, resolve } from "path";
 import { fileURLToPath, pathToFileURL } from "url";
+import { getSearchDefaults } from "./search-config.mjs";
 
 function parseArgs(argv) {
 	const out = {
@@ -385,8 +386,8 @@ async function resolveApiKey(provider, auth, authPath, piAi) {
 	};
 }
 
-function buildUserPrompt(query, purpose) {
-	return `Search the internet for: ${query}\n\nPurpose: ${purpose}\n\nReturn a concise research summary with:\n- 3 to 7 key findings\n- for every finding: title, why it matters for this purpose, and a full canonical URL (https://...)\n- if multiple sources disagree, call that out\n- finish with a short recommendation on which source(s) to trust first.`;
+export function buildUserPrompt(query, purpose) {
+	return `Search the internet for: ${query}\n\nPurpose: ${purpose}\n\nReturn a concise research summary with:\n- 3 to 7 key findings\n- for every finding: title, why it matters for this purpose, publication or update date, and a full canonical URL (https://...)\n- prioritize official or primary sources, especially for software, APIs, and version numbers\n- distinguish current facts from older information and state uncertainty when evidence is incomplete\n- if multiple sources disagree, call that out\n- finish with a short recommendation on which source(s) to trust first.`;
 }
 
 function buildSystemPrompt() {
@@ -588,9 +589,10 @@ async function main() {
 	const auth = readJson(authPath, {});
 	const settings = readJson(settingsPath, {});
 
-	const provider = pickProvider(args.provider, settings, auth);
+	const defaults = getSearchDefaults(settings);
+	const provider = pickProvider(args.provider || defaults.provider, settings, auth);
 	const piAi = await loadPiAi();
-	const model = pickFastModel(provider, args.model, piAi);
+	const model = pickFastModel(provider, args.model || defaults.model, piAi);
 	const { apiKey, accountId } = await resolveApiKey(provider, auth, authPath, piAi);
 
 	const text =
@@ -635,7 +637,9 @@ async function main() {
 	console.log(text);
 }
 
-main().catch((err) => {
-	console.error(`Error: ${err?.message || err}`);
-	process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+	main().catch((err) => {
+		console.error(`Error: ${err?.message || err}`);
+		process.exit(1);
+	});
+}

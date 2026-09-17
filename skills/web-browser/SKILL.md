@@ -39,6 +39,16 @@ Optional debug endpoint override:
 BROWSER_DEBUG_PORT=9333 ./scripts/start.js --headless
 ```
 
+## Clean Old Logs
+
+Console and network logs may contain sensitive URLs or request details. Remove JSONL logs older than the retention period (30 days by default):
+
+```bash
+./scripts/logs-clean.js 30
+```
+
+Set `AGENT_WEB_LOG_ROOT` to clean a different log directory. A value of `0` or a negative number disables deletion.
+
 ## Stop Chrome
 
 ```bash
