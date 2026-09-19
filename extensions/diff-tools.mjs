@@ -1,3 +1,9 @@
+export function findCaseInsensitiveMatches(values, query) {
+	const needle = query.trim().toLowerCase();
+	if (!needle) return [];
+	return values.flatMap((value, index) => (value.toLowerCase().includes(needle) ? [index] : []));
+}
+
 export function getFileSections(rows, untracked = new Set()) {
 	return rows.flatMap((row, rowIndex) =>
 		row.kind === "file" ? [{ name: row.text, rowIndex, untracked: untracked.has(row.text) }] : [],
