@@ -318,7 +318,7 @@ function pickFastModel(provider, requestedModel, piAi) {
 
 	const preferredIds =
 		provider === "openai-codex"
-			? ["gpt-5.4-mini", "gpt-5.3-codex-spark", "gpt-5.1", "gpt-5.1-codex-mini"]
+			? ["gpt-5.6-terra", "gpt-5.6-sol"]
 			: ["claude-haiku-4-5", "claude-3-5-haiku-latest", "claude-3-5-haiku-20241022"];
 
 	for (const id of preferredIds) {

@@ -11,14 +11,17 @@ function normalizeProvider(value) {
 }
 
 export function getSearchDefaults(settings = {}, env = process.env) {
-	const provider = [
-		env.NATIVE_WEB_SEARCH_PROVIDER,
-		settings.nativeWebSearchProvider,
-		settings.defaultProvider,
-	].map(normalizeProvider).find((value) => PROVIDERS.has(value));
+	const provider =
+		[
+			env.NATIVE_WEB_SEARCH_PROVIDER,
+			settings.nativeWebSearchProvider,
+			settings.defaultProvider,
+		]
+			.map(normalizeProvider)
+			.find((value) => PROVIDERS.has(value)) || "openai-codex";
 
 	return {
 		provider,
-		model: env.NATIVE_WEB_SEARCH_MODEL || settings.nativeWebSearchModel,
+		model: env.NATIVE_WEB_SEARCH_MODEL || settings.nativeWebSearchModel || "gpt-5.6-luna",
 	};
 }
