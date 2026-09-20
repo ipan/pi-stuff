@@ -2,23 +2,24 @@
 
 ## Goal
 
-Add a Pi extension providing a friendly `/jira` command for interacting with Jira Cloud through the user's already-configured OAuth-backed `twg` CLI.
+Add a Pi extension that provides a friendly `/jira` command for common Jira Cloud work-item workflows through the user's already-configured, OAuth-backed `twg` CLI.
 
-The command should support common Jira work-item workflows without implementing Jira authentication or direct Jira API access.
+The extension does not manage credentials, select sites, or call Jira REST APIs directly.
 
-## Agreed scope
+## Scope
 
-- Jira Cloud only.
-- Use the currently configured `twg` site and OAuth credentials; no site override.
-- Friendly Pi command syntax rather than a raw `twg` passthrough.
-- Supported initial operations: view, search, create, update, comment, transition, assign, and link.
-- If no subcommand is provided, infer `view` when appropriate.
-- Missing required values trigger interactive prompts.
-- Every mutating operation requires explicit confirmation.
-- View and search output is compact and human-readable.
-- Search accepts natural language only and converts it to JQL before querying.
-- Generated JQL is always displayed before search execution and must be confirmed.
-- Create accepts an optional Jira space/project shortname. If absent, infer it from recent context when reliable, otherwise prompt.
+The initial command supports:
+
+- view
+- natural-language search
+- create
+- update
+- comment
+- assign
+
+It does not support transitions or links.
+
+Jira Cloud, the currently configured `twg` site, and its existing OAuth credentials are the only supported environment. The command never accepts or supplies a site override.
 
 ## User interface
 
@@ -31,92 +32,137 @@ Examples:
 /jira create <PROJECT>
 /jira update PROJ-123
 /jira comment PROJ-123
-/jira transition PROJ-123
 /jira assign PROJ-123
-/jira link PROJ-123
 ```
 
-`/jira` and `/jira help` show command help and examples. The view shorthand is the normal path for an issue key.
+`/jira` and `/jira help` show command help and examples. An issue-key-style invocation without a verb defaults to `view`; empty input shows help.
 
-Interactive prompts collect missing fields using Pi's UI APIs (`input`, `select`, `editor`, and `confirm`). Create prompts include project, issue type, summary, description, and relevant optional fields. Other commands prompt only for fields required by the selected `twg` operation.
+Prompts use Pi's `input`, `select`, `editor`, and `confirm` APIs. Missing values are collected interactively.
 
-Mutation confirmation shows the planned operation and important values before invoking `twg`. Cancellation must stop without spawning a mutating command.
+### Create
+
+Create collects or infers:
+
+- project shortname
+- issue type
+- summary
+- description
+- optional assignee
+- optional priority
+- optional labels
+- optional parent
+
+The extension attempts to infer project, summary, and description independently from recent session context. Each inferred value is proposed in an editable field only when confidence is conservatively high; otherwise that individual field is prompted. Inference never silently creates an issue.
+
+### Update
+
+Update prompts only for the fields initially supported by the friendly UI:
+
+- summary
+- description
+- priority
+- assignee
+- sprint
+
+`assign` is a focused assignee-only shortcut. It maps to the same underlying `twg` update operation.
+
+### View
+
+Compact view output includes:
+
+- key and summary
+- description
+- priority
+- assignee
+- sprint
+- reporter
+- resolution
+- labels
+- Jira URL when supplied by `twg`
+
+### Search
+
+Search accepts natural language, not raw JQL as its primary interface. The active Pi model converts the request into structured output:
+
+```json
+{ "jql": "…", "interpretation": "…" }
+```
+
+The extension validates that response, displays both the interpretation and JQL, and requires confirmation before querying. Invalid or malformed conversion output is reported and never blindly retried.
+
+Search results are compact rows containing key, summary, status, assignee, updated time, and URL when available.
+
+## Installed `twg` adapter contract
+
+The extension targets the currently installed `twg` work-item dialect. `twg.ts` exposes typed operations and builds only fixed subprocess argument arrays:
+
+| Friendly action | `twg` operation |
+| --- | --- |
+| view | `twg jira workitem get <key> -o json` |
+| search | `twg jira workitem query --jql <jql> --limit 20 -o json` |
+| create | `twg jira workitem create --space <project> --type <type> --summary <summary> --description <description> --description-format markdown … -y -o json` |
+| update | `twg jira workitem update --id <key> <changed-field-flags> -o json` |
+| comment | `twg jira workitem comment create --issue-id <key> --body <body> --body-format markdown -o json` |
+| assign | `twg jira workitem update --id <key> --assignee <assignee> -o json` |
+
+`create` receives `-y` only after Pi's explicit confirmation, preventing a second CLI confirmation. The adapter never uses shell interpolation, accepts raw CLI options, or passes `--site`. Its isolated typed boundary permits a future `twg` version adapter without changing command routing or prompts.
 
 ## Architecture
 
-Implement a multi-file extension under `extensions/jira/`:
-
 ```text
 extensions/jira/
-  index.ts          # /jira registration and command routing
-  parser.ts         # friendly command parsing
-  prompts.ts        # interactive field collection
-  twg.ts            # controlled subprocess wrapper
-  jira-output.ts    # compact result formatting
-  jql.ts            # natural-language to JQL conversion
-  jira.test.ts      # parser, command, and formatting tests
+  index.ts          # /jira registration, routing, and orchestration
+  parser.ts         # friendly command parsing and help text
+  prompts.ts        # interactive field collection and confirmations
+  inference.ts      # strict model responses for create-field inference
+  jql.ts            # strict model responses for natural-language JQL
+  twg.ts            # typed, safe twg subprocess adapter
+  jira-output.ts    # JSON validation and compact rendering
+  jira.test.ts      # isolated command, parser, and formatting tests
 ```
+
+`package.json` must include `./extensions/*/index.ts` in its Pi extension discovery configuration; the existing top-level glob does not discover this directory entry point.
 
 Responsibilities:
 
-- `index.ts`: register `/jira`, coordinate parsing, prompts, model-backed JQL conversion, execution, confirmation, and rendering.
-- `parser.ts`: parse friendly subcommands and positional values without shell evaluation.
-- `prompts.ts`: centralize missing-value prompts and confirmation text.
-- `twg.ts`: invoke `twg` using a subprocess argument array, request JSON output, capture stdout/stderr, enforce a timeout, and normalize failures.
-- `jira-output.ts`: validate the expected JSON shape and render compact issue/search/mutation summaries with Jira URLs where available.
-- `jql.ts`: use the active Pi model to convert natural language into structured JQL output and validate the response before displaying it.
+- `index.ts` registers `/jira`, coordinates parsing, prompts, model calls, confirmation, execution, and rendering.
+- `parser.ts` parses friendly subcommands and positional values without shell evaluation.
+- `prompts.ts` centralizes missing-value collection, editable inference review, and operation-specific confirmation text.
+- `inference.ts` reads recent active-session context and requests strict model JSON for project, summary, and description plus confidence values.
+- `jql.ts` requests and validates strict model JSON containing JQL and a concise interpretation.
+- `twg.ts` invokes `twg` via an argument array, requests JSON, captures stdout/stderr, enforces a timeout, and normalizes failures.
+- `jira-output.ts` validates expected JSON shapes and renders selected view fields, compact search rows, and mutation summaries.
 
-The extension must not manage credentials, call Jira REST APIs directly, or accept a site override. Authentication and site selection remain the responsibility of `twg`.
+## Data flow and safety
 
-## Data flow
+1. Parse `/jira` input.
+2. Route an issue-key shorthand to view, route an explicit supported verb, or show help.
+3. Collect missing fields. For create, infer project, summary, and description from recent context when reliable and present inferred values for editing.
+4. For search, invoke the active model for JQL conversion; validate and display its interpretation and JQL.
+5. Require confirmation before search execution and every mutation: create, update, comment, and assign.
+6. On cancellation, stop successfully without spawning a query or mutation command.
+7. Build and execute the fixed `twg` argument array with JSON output.
+8. Validate and compactly render the result, or present an actionable error.
 
-1. Parse the `/jira` input.
-2. Default to view for an issue-key-style invocation; otherwise show help for an empty invocation.
-3. Gather missing values through Pi UI prompts.
-4. For create, inspect recent session context for a reliable project shortname; prompt if none can be safely inferred.
-5. For search, provide the natural-language request and relevant Jira guidance to the active Pi model. Require a structured result containing JQL and an interpretation.
-6. Display the interpretation and JQL and require confirmation before querying.
-7. For mutations, display the planned operation and require confirmation.
-8. Build a fixed `twg jira ...` argument array and execute it with JSON output.
-9. Parse the result, render a compact summary, and report actionable errors.
-
-## Search conversion
-
-Search input is natural language only. Users do not provide raw JQL as the primary interface.
-
-The model conversion prompt must require valid Jira Cloud JQL and a structured response containing:
-
-- `jql`: the query to send to `twg`
-- `interpretation`: a concise human-readable description
-
-The command displays both values before execution. If conversion fails, the response is malformed, or JQL is rejected, report the error and do not retry blindly.
-
-## Safety and errors
-
-- All mutations require explicit confirmation, including create, update, comment, transition, assign, and link.
-- User cancellation is a successful no-op and must not invoke `twg`.
-- Subprocess arguments must never be assembled into an interpolated shell command.
-- Missing `twg`, authentication failures, non-zero exit status, malformed JSON, unsupported commands, and API errors receive clear user-facing messages.
-- Search and view failures must not be mistaken for empty results.
-- The extension should respect Pi cancellation where supported and avoid leaking credentials in errors or notifications.
+Missing `twg`, authentication failures, non-zero exit status, timeouts, malformed JSON, API errors, unsupported commands, absent active model, and invalid model output produce clear user-facing errors. Read/search failures are never rendered as empty results. Errors and notifications must not expose credentials.
 
 ## Testing
 
-Tests should cover:
+Tests mock the model converter, UI prompts, recent session context, and subprocess runner. The suite needs no Jira credentials, network access, or live `twg` session.
 
-- Default view routing and explicit subcommands.
-- Argument parsing and help output.
-- Missing-field prompt behavior and cancellation.
-- Project inference success and prompt fallback.
-- Model JQL response parsing and invalid-response handling.
-- JQL display and confirmation behavior.
-- Mutation confirmation and cancellation.
-- Safe `twg` argument construction.
-- JSON parsing and compact formatting.
-- Missing executable, authentication failure, non-zero exit, timeout, and malformed output.
+Coverage includes:
 
-Tests should mock subprocess execution and model conversion so the suite does not require Jira credentials, network access, or a live `twg` session.
+- issue-key shorthand, explicit subcommands, unsupported commands, and help output
+- missing-field prompts and per-field context-inference fallback
+- editable inferred project, summary, and description values
+- create optional fields
+- update's selected field set and assign's assignee-only flow
+- JQL structured-response validation, display, confirmation, and cancellation
+- mutation confirmation and cancellation
+- safe `twg` argument construction and absence of a site override
+- JSON parsing and selected compact view/search/mutation rendering
+- missing executable, authentication failure, non-zero exit, timeout, and malformed output
 
 ## Out of scope
 
-The initial implementation does not include Jira administration, project creation, dashboards, sprints, filters, direct REST calls, multiple-site selection, raw-JQL search as the main interface, or a separate authentication flow.
+The initial implementation excludes Jira administration, project creation, dashboards, filters, sprints management, direct REST calls, multiple-site selection, a separate authentication flow, raw-JQL search as the main interface, transitions, and links.
