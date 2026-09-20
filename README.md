@@ -22,6 +22,12 @@ Resources live in conventional directories and are declared in the `pi` key of
   directory (or one explicit directory) in [Zed](https://zed.dev). Launched
   detached so the agent keeps control; add `--wait` to block until the editor
   closes.
+- [`jira`](extensions/jira/) - `/jira` manages Jira Cloud work items through
+  the locally configured `twg` OAuth session. Use `/jira PROJ-123` to view,
+  `/jira search open bugs assigned to me` to generate and confirm JQL, or
+  `/jira create`, `/jira update PROJ-123`, `/jira comment PROJ-123`, and
+  `/jira assign PROJ-123` for confirmed interactive operations. Run `twg login`
+  if authentication is unavailable.
 
 ## Adding a resource
 

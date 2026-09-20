@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { JIRA_HELP, isIssueKey, parseJiraCommand } from "./parser.ts";
 import { JiraOutputError, formatMutationResult, formatSearchResult, formatViewResult } from "./jira-output.ts";
-import { TwgError, buildAssignArgs, buildCreateArgs, buildSearchArgs, createTwgClient } from "./twg.ts";
+import { TwgError, buildAssignArgs, buildCreateArgs, buildSearchArgs, buildUpdateArgs, createTwgClient } from "./twg.ts";
 import { ModelOutputError, convertNaturalLanguageToJql, inferCreateFields } from "./inference.ts";
 import { collectCreateDraft, collectUpdateDraft } from "./prompts.ts";
 import jiti from "/Users/ivan.pan/.asdf/installs/nodejs/26.8.2/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/jiti/lib/jiti.mjs";
@@ -80,4 +80,17 @@ test("shows JQL and does not query when search confirmation is declined", async 
 	const handler = createJiraCommandHandler({ convertJql: async () => ({ jql: "status = Open", interpretation: "Open issues" }), twg: { search: async () => { queried = true; return {}; } } } as any);
 	await handler("search open issues", { hasUI: true, ui: { ...scriptedUi([false]), notify: (message: string) => notes.push(message) } } as any);
 	assert.equal(queried, false); assert.match(notes.join("\n"), /status = Open/);
+});
+
+test("rejects updates without fields and malformed twg JSON", async () => {
+	assert.throws(() => buildUpdateArgs({ key: "PROJ-123" }), TwgError);
+	const client = createTwgClient(async () => ({ stdout: "not-json", stderr: "", exitCode: 0 }));
+	await assert.rejects(() => client.view("PROJ-123"), /malformed JSON/);
+});
+
+test("cancelled create does not invoke twg", async () => {
+	let created = false;
+	const handler = createJiraCommandHandler({ twg: { create: async () => { created = true; return {}; } } } as any);
+	await handler("create PROJ", { hasUI: true, ui: scriptedUi([undefined]) } as any);
+	assert.equal(created, false);
 });
