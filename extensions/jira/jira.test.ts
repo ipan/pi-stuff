@@ -136,6 +136,21 @@ test("reviews inferred create fields and stops on update cancellation", async ()
 	assert.deepEqual(await collectUpdateDraft(scriptedUi(["PROJ-123", "Summary", "New summary", "Priority", "High", "Done"])), { key: "PROJ-123", summary: "New summary", priority: "High" });
 });
 
+test("opens Jira views in TUI overlays and keeps notification fallback elsewhere", async () => {
+	const payload = { data: [{ key: "IRS-66465", summary: "Build issue", issuetype: { name: "Task" }, priority: { name: "High" }, description: "Details", url: "https://example.atlassian.net/browse/IRS-66465" }] };
+	let customOptions: any;
+	let rendered = "";
+	const handler = createJiraCommandHandler({ twg: { view: async () => payload } } as any);
+	await handler("irs-66465", { hasUI: true, mode: "tui", ui: { custom: async (factory: any, options: any) => { customOptions = options; rendered = factory({ requestRender: () => {} }, { fg: (_name: string, text: string) => text }, {}, () => {}).render(50).join("\n"); } } } as any);
+	assert.equal(customOptions.overlay, true);
+	assert.equal(customOptions.overlayOptions.anchor, "center");
+	assert.match(rendered, /IRS-66465|Build issue/);
+
+	const notes: string[] = [];
+	await handler("irs-66465", { hasUI: true, mode: "print", ui: { notify: (message: string) => notes.push(message) } } as any);
+	assert.match(notes.join("\n"), /IRS-66465: Build issue/);
+});
+
 test("shows JQL and does not query when search confirmation is declined", async () => {
 	let queried = false; const notes: string[] = [];
 	const handler = createJiraCommandHandler({ convertJql: async () => ({ jql: "status = Open", interpretation: "Open issues" }), twg: { search: async () => { queried = true; return {}; } } } as any);
