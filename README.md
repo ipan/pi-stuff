@@ -17,6 +17,7 @@ Resources live in conventional directories and are declared in the `pi` key of
 ## Extensions
 
 - [`diff.ts`](extensions/diff.ts) - `/diff` opens a GitHub-style viewer for staged and unstaged tracked changes.
+- [`edit.ts`](extensions/edit.ts) - `/edit recent` or `/edit @path...` opens files and folders in `$EDITOR` from the current terminal.
 - [`zed.ts`](extensions/zed.ts) - `/zed` opens the current session working
   directory (or one explicit directory) in [Zed](https://zed.dev). Launched
   detached so the agent keeps control; add `--wait` to block until the editor
