@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import type { CreateDraft, TwgRunner, UpdateDraft } from "./types.ts";
 
 export class TwgError extends Error { constructor(message: string) { super(message); this.name = "TwgError"; } }
-const json = ["-o", "json"];
+const json = ["-o", "json", "--output-summary", "none"];
 const add = (args: string[], flag: string, value?: string) => { if (value?.trim()) args.push(flag, value.trim()); };
 export const buildViewArgs = (key: string) => ["jira", "workitem", "get", key, ...json];
 export const buildSearchArgs = (jql: string) => ["jira", "workitem", "query", "--jql", jql, "--limit", "20", ...json];

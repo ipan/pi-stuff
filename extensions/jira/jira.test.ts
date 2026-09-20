@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { JIRA_HELP, isIssueKey, parseJiraCommand } from "./parser.ts";
 import { JiraOutputError, formatMutationResult, formatSearchResult, formatViewResult } from "./jira-output.ts";
-import { TwgError, buildAssignArgs, buildCreateArgs, buildSearchArgs, buildUpdateArgs, createTwgClient } from "./twg.ts";
+import { TwgError, buildAssignArgs, buildCreateArgs, buildSearchArgs, buildUpdateArgs, buildViewArgs, createTwgClient } from "./twg.ts";
 import { ModelOutputError, convertNaturalLanguageToJql, inferCreateFields } from "./inference.ts";
 import { collectCreateDraft, collectUpdateDraft } from "./prompts.ts";
 import jiti from "/Users/ivan.pan/.asdf/installs/nodejs/26.8.2/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/jiti/lib/jiti.mjs";
@@ -41,6 +41,12 @@ test("renders selected compact view fields", () => {
 	for (const expected of ["PROJ-123", "Ship Jira command", "Sprint 42", "Reporter: Lin", "Resolution: Done", "cli, jira"]) assert.match(text, new RegExp(expected));
 });
 
+test("renders the live twg view envelope and ADF description", () => {
+	const text = formatViewResult({ data: [{ key: "THB-8149", summary: "GenMax Sprint Build", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Generate the build." }] }] }, priority: { name: "Medium" }, assignee: { displayName: "Ivan Pan" }, reporter: { displayName: "Ada" }, resolution: { name: "Done" }, labels: [] }] });
+	assert.match(text, /THB-8149: GenMax Sprint Build/);
+	assert.match(text, /Generate the build\./);
+});
+
 test("renders compact search rows and rejects unknown envelopes", () => {
 	assert.match(formatSearchResult({ data: { items: [{ ...issue, status: { name: "Open" }, updated: "2026-09-19" }] } }), /Open/);
 	assert.throws(() => formatSearchResult({ data: {} }), JiraOutputError);
@@ -49,8 +55,9 @@ test("renders compact search rows and rejects unknown envelopes", () => {
 });
 
 test("builds fixed JSON commands with no site override", () => {
-	assert.deepEqual(buildSearchArgs("assignee = currentUser()"), ["jira", "workitem", "query", "--jql", "assignee = currentUser()", "--limit", "20", "-o", "json"]);
-	assert.deepEqual(buildAssignArgs("PROJ-123", "me"), ["jira", "workitem", "update", "--id", "PROJ-123", "--assignee", "me", "-o", "json"]);
+	assert.deepEqual(buildSearchArgs("assignee = currentUser()"), ["jira", "workitem", "query", "--jql", "assignee = currentUser()", "--limit", "20", "-o", "json", "--output-summary", "none"]);
+	assert.deepEqual(buildAssignArgs("PROJ-123", "me"), ["jira", "workitem", "update", "--id", "PROJ-123", "--assignee", "me", "-o", "json", "--output-summary", "none"]);
+	assert.deepEqual(buildViewArgs("THB-8149").slice(-4), ["-o", "json", "--output-summary", "none"]);
 	assert.equal(buildCreateArgs({ project: "PROJ", type: "Task", summary: "S", description: "D" }).includes("--site"), false);
 });
 
