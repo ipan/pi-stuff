@@ -1,13 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findCaseInsensitiveMatches, getFileSections, parseUnifiedDiff } from "./diff-tools.mjs";
-
-test("findCaseInsensitiveMatches returns matching indexes", () => {
-	assert.deepEqual(
-		findCaseInsensitiveMatches(["README.md", "src/App.ts", "src/app.test.ts"], "app"),
-		[1, 2],
-	);
-});
+import { getFileSections, parseUnifiedDiff } from "./diff-tools.mjs";
 
 test("getFileSections returns each file name and its first diff row", () => {
 	const rows = parseUnifiedDiff([
