@@ -8,6 +8,7 @@ const hyperlink = (url: string) => `\x1b]8;;${url}\x07${url}\x1b]8;;\x07`;
 export class JiraIssueOverlay {
 	private scrollTop = 0;
 	private showAdditional = false;
+	private bodyViewport = BODY_LINES;
 
 	constructor(
 		view: JiraViewModel,
@@ -40,7 +41,7 @@ export class JiraIssueOverlay {
 	}
 
 	private clampScroll(): void {
-		this.scrollTop = Math.max(0, Math.min(this.scrollTop, Math.max(0, this.bodyLines().length - BODY_LINES)));
+		this.scrollTop = Math.max(0, Math.min(this.scrollTop, Math.max(0, this.bodyLines().length - this.bodyViewport)));
 	}
 
 	handleMouse(event: { type: string; wheelDelta?: number }): { handled: boolean; render: boolean } | undefined {
@@ -69,9 +70,9 @@ export class JiraIssueOverlay {
 		} else if (matchesKey(data, Key.down)) {
 			this.scrollTop++;
 		} else if (matchesKey(data, Key.pageUp)) {
-			this.scrollTop -= BODY_LINES;
+			this.scrollTop -= this.bodyViewport;
 		} else if (matchesKey(data, Key.pageDown)) {
-			this.scrollTop += BODY_LINES;
+			this.scrollTop += this.bodyViewport;
 		} else if (matchesKey(data, Key.home)) {
 			this.scrollTop = 0;
 		} else if (matchesKey(data, Key.end)) {
@@ -92,15 +93,19 @@ export class JiraIssueOverlay {
 		const horizontal = this.theme.fg("borderMuted", "─".repeat(innerWidth + 2));
 		const line = (value: string) => `${border} ${truncateToWidth(value, innerWidth, "", true)} ${border}`;
 		const header = wrapTextWithAnsi(this.theme.fg("accent", this.view.summary), innerWidth);
-		const body = this.bodyLines().slice(this.scrollTop, this.scrollTop + BODY_LINES);
-		while (body.length < BODY_LINES) body.push("");
+		const footer = this.footerLines();
+		const maxHeight = Math.floor((this.tui.terminal?.rows ?? (BODY_LINES + header.length + footer.length + 4)) * 0.6);
+		this.bodyViewport = Math.max(1, maxHeight - header.length - footer.length - 4);
+		this.clampScroll();
+		const body = this.bodyLines().slice(this.scrollTop, this.scrollTop + this.bodyViewport);
+		while (body.length < this.bodyViewport) body.push("");
 		return [
 			this.theme.fg("borderMuted", `╭${horizontal}╮`),
 			...header.map(line),
 			this.theme.fg("borderMuted", `├${horizontal}┤`),
 			...body.map(line),
 			this.theme.fg("borderMuted", `├${horizontal}┤`),
-			...this.footerLines().map(line),
+			...footer.map(line),
 			this.theme.fg("borderMuted", `╰${horizontal}╯`),
 		].map((value) => truncateToWidth(value, width, ""));
 	}

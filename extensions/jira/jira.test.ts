@@ -75,7 +75,7 @@ test("parses structured Jira view data for the issue overlay", () => {
 
 test("renders and controls the Jira issue overlay", () => {
 	const view = parseViewResult({ data: [{ key: "IRS-66465", summary: "A very long summary that should wrap across lines", issuetype: { name: "Task" }, priority: { name: "High" }, description: Array.from({ length: 12 }, (_, index) => `Description line ${index + 1}`).join("\n"), assignee: { displayName: "Ada" }, sprint: { name: "Sprint 1" }, reporter: { displayName: "Lin" }, resolution: { name: "Done" }, labels: ["one", "two"], url: "https://example.atlassian.net/browse/IRS-66465" }] });
-	const tui = { requestRender: () => {} } as any;
+	const tui = { requestRender: () => {}, terminal: { rows: 30 } } as any;
 	const theme = { fg: (_name: string, text: string) => text, bold: (text: string) => text } as any;
 	let closed = false;
 	const overlay = new JiraIssueOverlay(view, theme, tui, () => { closed = true; });
@@ -86,8 +86,11 @@ test("renders and controls the Jira issue overlay", () => {
 	assert.match(initial.join("\n"), /https:\/\/example\.atlassian\.net\/browse\/IRS-66465/);
 	assert.doesNotMatch(initial.join("\n"), /Assignee: Ada/);
 	assert.ok(initial.every((line) => visibleWidth(line) <= 50));
+	assert.equal(initial.length, 18);
 	overlay.handleInput("\t");
-	assert.match(overlay.render(50).join("\n"), /Assignee: Ada/);
+	const expanded = overlay.render(50);
+	assert.equal(expanded.length, 18);
+	assert.match(expanded.join("\n"), /Assignee: Ada/);
 	assert.match(overlay.render(50).join("\n"), /Labels: one, two/);
 	const beforeScroll = overlay.render(50).join("\n");
 	overlay.handleInput("\x1b[B");
