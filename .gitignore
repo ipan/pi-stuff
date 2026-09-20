@@ -10,3 +10,5 @@ node_modules/
 
 # pi project-local overrides (kept separate from the package itself)
 .pi/
+
+.worktrees/
