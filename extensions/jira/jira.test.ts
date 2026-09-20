@@ -4,6 +4,7 @@ import { JIRA_HELP, isIssueKey, parseJiraCommand } from "./parser.ts";
 import { JiraOutputError, formatMutationResult, formatSearchResult, formatViewResult } from "./jira-output.ts";
 import { TwgError, buildAssignArgs, buildCreateArgs, buildSearchArgs, createTwgClient } from "./twg.ts";
 import { ModelOutputError, convertNaturalLanguageToJql, inferCreateFields } from "./inference.ts";
+import { collectCreateDraft, collectUpdateDraft } from "./prompts.ts";
 
 test("routes an issue key shorthand and supported verbs", () => {
 	assert.deepEqual(parseJiraCommand("PROJ-123"), { action: "view", key: "PROJ-123" });
@@ -60,4 +61,11 @@ test("returns only high-confidence create inference fields", async () => {
 test("requires exact JSON JQL output", async () => {
 	await assert.rejects(() => convertNaturalLanguageToJql("my bugs", async () => "```json\n{}\n```"), ModelOutputError);
 	await assert.rejects(() => convertNaturalLanguageToJql("my bugs", async () => "{\"jql\":\"\"}"), ModelOutputError);
+});
+
+const scriptedUi = (answers: Array<string | boolean | undefined>) => ({ input: async (_title: string, initial = "") => answers.shift() as string | undefined ?? initial, editor: async (_title: string, initial = "") => answers.shift() as string | undefined ?? initial, select: async () => answers.shift() as string | undefined, confirm: async () => answers.shift() as boolean | undefined, notify: () => {} });
+test("reviews inferred create fields and stops on update cancellation", async () => {
+	const draft = await collectCreateDraft(scriptedUi(["PAY", "Bug", "Fix cards", "Description", "Skip optional fields"]), { project: "PAY", type: "Bug", summary: "Fix cards" });
+	assert.deepEqual(draft, { project: "PAY", type: "Bug", summary: "Fix cards", description: "Description" });
+	assert.equal(await collectUpdateDraft(scriptedUi(["PROJ-123", undefined])), null);
 });
