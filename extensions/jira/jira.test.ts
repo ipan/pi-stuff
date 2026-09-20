@@ -45,6 +45,7 @@ test("renders compact search rows and rejects unknown envelopes", () => {
 	assert.match(formatSearchResult({ data: { items: [{ ...issue, status: { name: "Open" }, updated: "2026-09-19" }] } }), /Open/);
 	assert.throws(() => formatSearchResult({ data: {} }), JiraOutputError);
 	assert.match(formatMutationResult("assign", { data: { item: issue } }), /Assigned.*PROJ-123/);
+	assert.match(formatMutationResult("update", issue), /Updated.*PROJ-123/);
 });
 
 test("builds fixed JSON commands with no site override", () => {

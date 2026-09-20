@@ -12,7 +12,7 @@ const field = (item: Item, key: string): string => {
 };
 function items(payload: unknown): Item[] {
 	const root = record(payload); const data = record(root?.data) ?? root;
-	const value = data?.items ?? data?.item;
+	const value = data?.items ?? data?.item ?? (typeof data?.key === "string" ? data : undefined);
 	const list = Array.isArray(value) ? value : value ? [value] : null;
 	if (!list) throw new JiraOutputError("Jira returned malformed JSON output.");
 	return list.map(record).filter((x): x is Item => !!x);
