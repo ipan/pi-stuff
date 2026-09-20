@@ -94,6 +94,9 @@ test("renders and controls the Jira issue overlay", () => {
 	const afterScroll = overlay.render(50).join("\n");
 	assert.notEqual(afterScroll, beforeScroll);
 	assert.match(afterScroll, /A very long summary/);
+	const beforeWheel = overlay.render(50).join("\n");
+	overlay.handleMouse({ type: "wheel", button: "none", x: 0, y: 0, screenX: 0, screenY: 0, width: 50, height: 20, shift: false, alt: false, ctrl: false, wheelDelta: 1 });
+	assert.notEqual(overlay.render(50).join("\n"), beforeWheel);
 	assert.match(afterScroll, /Issue type: Task · Priority: High/);
 	overlay.handleInput("\x1b");
 	assert.equal(closed, true);
@@ -145,6 +148,7 @@ test("opens Jira views in TUI overlays and keeps notification fallback elsewhere
 	assert.equal(customOptions.overlay, true);
 	assert.equal(customOptions.overlayOptions.anchor, "center");
 	assert.equal(customOptions.overlayOptions.minWidth, 60);
+	assert.equal(customOptions.overlayOptions.maxHeight, "60%");
 	assert.match(rendered, /IRS-66465|Build issue/);
 
 	const notes: string[] = [];

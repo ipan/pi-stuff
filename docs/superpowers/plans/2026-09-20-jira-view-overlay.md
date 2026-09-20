@@ -167,10 +167,10 @@ Implement `JiraIssueOverlay` with:
 
 1. Fixed header lines produced by `wrapTextWithAnsi(view.summary, innerWidth)`.
 2. A body line array from `view.description.split("\n")`, with an explicit empty-description line.
-3. A fixed footer with `Issue type: ${view.issueType} · Priority: ${view.priority}` and the URL wrapped in the OSC 8 sequence `\x1b]8;;${url}\x07${url}\x1b]8;;\x07` when present.
-4. When `showAdditional` is true, prepend the five additional-field lines to the scrollable body; description lines follow. Keep header and footer outside the scroll window.
+3. A dynamic footer containing the five additional-field lines when `showAdditional` is true, followed by `Issue type: ${view.issueType} · Priority: ${view.priority}` and the URL wrapped in the OSC 8 sequence `\x1b]8;;${url}\x07${url}\x1b]8;;\x07` when present.
+4. Keep header and footer outside the scroll window; the footer height changes with the Tab toggle.
 5. `scrollTop` clamped to the available body line count and viewport height.
-6. Keyboard handling for `Key.up`, `Key.down`, `Key.pageup`, `Key.pagedown`, `Key.home`, `Key.end`, `Key.tab`, and `Key.escape`; every state change calls `tui.requestRender()` and `invalidate()`.
+6. Keyboard handling for `Key.up`, `Key.down`, `Key.pageUp`, `Key.pageDown`, `Key.home`, `Key.end`, `Key.tab`, and `Key.escape`, plus mouse-wheel handling through `handleMouse`; every state change calls `tui.requestRender()` and `invalidate()`.
 7. A framed overlay render that pads/truncates each line to the requested width and never emits lines wider than `width`.
 
 Use the theme from the constructor and `matchesKey` for input matching. Do not use a global theme import.
@@ -201,7 +201,7 @@ git commit -m "feat: add scrollable jira issue overlay"
 **Interfaces:**
 - Consumes `parseViewResult` and `JiraIssueOverlay`.
 - Uses the existing `Context` fields and `ctx.mode` to distinguish TUI mode.
-- Uses `ctx.ui.custom<void>(factory, { overlay: true, overlayOptions: { anchor: "center", width: "80%", minWidth: 50, maxHeight: "85%" } })`.
+- Uses `ctx.ui.custom<void>(factory, { overlay: true, overlayOptions: { anchor: "center", width: "80%", minWidth: 60, maxHeight: "60%" } })`.
 
 - [ ] **Step 1: Write failing handler tests**
 
@@ -229,7 +229,7 @@ if (ctx.mode === "tui" && typeof ctx.ui.custom === "function") {
     (tui, theme, _keybindings, done) => new JiraIssueOverlay(view, theme, tui, done),
     {
       overlay: true,
-      overlayOptions: { anchor: "center", width: "80%", minWidth: 50, maxHeight: "85%" },
+      overlayOptions: { anchor: "center", width: "80%", minWidth: 60, maxHeight: "60%" },
     },
   );
   return;

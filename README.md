@@ -24,7 +24,8 @@ Resources live in conventional directories and are declared in the `pi` key of
   closes.
 - [`jira`](extensions/jira/) - `/jira` manages Jira Cloud work items through
   the locally configured `twg` OAuth session. Use `/jira PROJ-123` to open a
-  scrollable TUI view (Tab toggles additional fields, Esc closes it, and the
+  scrollable TUI view (60% terminal height; mouse wheel scrolls the description,
+  Tab toggles additional fields in the dynamic footer, Esc closes it, and the
   full Jira URL is clickable when supported); non-TUI modes use compact output.
   Use `/jira search open bugs assigned to me` to generate and confirm JQL, or
   `/jira create`, `/jira update PROJ-123`, `/jira comment PROJ-123`, and

@@ -27,12 +27,32 @@ export class JiraIssueOverlay {
 	private readonly done: () => void;
 
 	private bodyLines(): string[] {
+		return this.view.description.split("\n");
+	}
+
+	private footerLines(): string[] {
 		const fields = this.showAdditional ? this.view.additionalFields.map(([label, value]) => `${label}: ${value}`) : [];
-		return [...fields, ...this.view.description.split("\n")];
+		return [
+			...fields,
+			`Issue type: ${this.view.issueType} · Priority: ${this.view.priority}`,
+			this.view.url ? hyperlink(this.view.url) : "Jira URL: —",
+		];
 	}
 
 	private clampScroll(): void {
 		this.scrollTop = Math.max(0, Math.min(this.scrollTop, Math.max(0, this.bodyLines().length - BODY_LINES)));
+	}
+
+	handleMouse(event: { type: string; wheelDelta?: number }): { handled: boolean; render: boolean } | undefined {
+		if (event.type !== "wheel" || event.wheelDelta === undefined) return undefined;
+		const previous = this.scrollTop;
+		this.scrollTop += event.wheelDelta;
+		this.clampScroll();
+		if (this.scrollTop !== previous) {
+			this.invalidate();
+			this.tui.requestRender();
+		}
+		return { handled: true, render: this.scrollTop !== previous };
 	}
 
 	handleInput(data: string): void {
@@ -74,17 +94,13 @@ export class JiraIssueOverlay {
 		const header = wrapTextWithAnsi(this.theme.fg("accent", this.view.summary), innerWidth);
 		const body = this.bodyLines().slice(this.scrollTop, this.scrollTop + BODY_LINES);
 		while (body.length < BODY_LINES) body.push("");
-		const footer = [
-			`Issue type: ${this.view.issueType} · Priority: ${this.view.priority}`,
-			this.view.url ? hyperlink(this.view.url) : "Jira URL: —",
-		];
 		return [
 			this.theme.fg("borderMuted", `╭${horizontal}╮`),
 			...header.map(line),
 			this.theme.fg("borderMuted", `├${horizontal}┤`),
 			...body.map(line),
 			this.theme.fg("borderMuted", `├${horizontal}┤`),
-			...footer.map(line),
+			...this.footerLines().map(line),
 			this.theme.fg("borderMuted", `╰${horizontal}╯`),
 		].map((value) => truncateToWidth(value, width, ""));
 	}

@@ -20,9 +20,9 @@ The overlay has three regions:
    - issue type and priority;
    - the complete Jira URL rendered as an OSC 8 clickable hyperlink when a URL is available.
 
-Additional fields are hidden initially. Pressing `Tab` toggles their visibility. The additional fields are the existing secondary view fields: assignee, sprint, reporter, resolution, and labels. The description remains the scrollable content area in either mode. `Esc` closes the overlay.
+Additional fields are hidden initially. Pressing `Tab` toggles their visibility in the dynamic footer. The additional fields are the existing secondary view fields: assignee, sprint, reporter, resolution, and labels. The description remains the scrollable content area in either mode, with keyboard and mouse-wheel scrolling. `Esc` closes the overlay.
 
-The overlay uses the injected Pi TUI theme and key handling APIs, and is sized responsively with a bounded maximum height so it does not cover the entire terminal unnecessarily.
+The overlay uses the injected Pi TUI theme and key handling APIs, is limited to 60% of terminal height, and is sized responsively so it does not cover the entire terminal unnecessarily.
 
 ## Data Flow
 
@@ -36,7 +36,7 @@ The current compact string formatter remains available for fallback and existing
 
 ## Scrolling
 
-The description body uses the Pi TUI scrolling component or equivalent component-level scroll state. Header and footer are rendered outside the scrollable body so they remain fixed. Keyboard input must update scroll position and request a render; unhandled keys should preserve standard overlay behavior. The component must obey the TUI line-width contract after wrapping and styling.
+The description body uses the Pi TUI scrolling component or equivalent component-level scroll state. Header and dynamic footer are rendered outside the scrollable body so they remain fixed. Keyboard and mouse-wheel input must update scroll position and request a render; unhandled keys should preserve standard overlay behavior. The component must obey the TUI line-width contract after wrapping and styling.
 
 ## URL Rendering
 
