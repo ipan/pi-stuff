@@ -34,15 +34,35 @@ function description(value: unknown): string {
 	if (typeof value === "string") return value;
 	const node = record(value);
 	if (!node) return "";
-	const text = typeof node.text === "string" ? node.text : "";
-	const children = Array.isArray(node.content) ? node.content.map(description).filter(Boolean).join("\n") : "";
-	return [text, children].filter(Boolean).join("\n");
+	const type = typeof node.type === "string" ? node.type : "";
+	const children = Array.isArray(node.content) ? node.content.map(description).filter(Boolean) : [];
+	if (type === "text") {
+		let text = typeof node.text === "string" ? node.text : "";
+		for (const mark of Array.isArray(node.marks) ? mark : []) {
+			const name = record(mark)?.type;
+			if (name === "strong") text = `**${text}**`;
+			else if (name === "em") text = `*${text}*`;
+			else if (name === "code") text = `\`${text}\``;
+		}
+		return text;
+	}
+	if (type === "heading") {
+		const level = typeof record(node.attrs)?.level === "number" ? record(node.attrs)!.level as number : 1;
+		return `${"#".repeat(Math.max(1, Math.min(6, level)))} ${children.join("")}`;
+	}
+	if (type === "bulletList") return children.map((child) => `- ${child.replace(/\n+/gu, " ").trim()}`).join("\n");
+	if (type === "orderedList") return children.map((child, index) => `${index + 1}. ${child.replace(/\n+/gu, " ").trim()}`).join("\n");
+	return children.join(type === "paragraph" || type === "listItem" ? "" : "\n\n");
+}
+function markdownDescription(value: unknown): string {
+	const markdown = description(value).trim();
+	return markdown.replace(/\n{3,}/gu, "\n\n");
 }
 export function parseViewResult(payload: unknown): JiraViewModel {
 	const item = valid(items(payload)[0] ?? {});
 	const labels = Array.isArray(item.labels) ? item.labels.filter((x): x is string => typeof x === "string").join(", ") : "";
 	return {
-		key: field(item, "key"), summary: field(item, "summary"), description: description(item.description) || "—",
+		key: field(item, "key"), summary: field(item, "summary"), description: markdownDescription(item.description) || "—",
 		issueType: field(item, "issuetype"), priority: field(item, "priority"),
 		url: typeof item.url === "string" ? item.url : undefined,
 		additionalFields: [["Assignee", field(item, "assignee")], ["Sprint", field(item, "sprint")], ["Reporter", field(item, "reporter")], ["Resolution", field(item, "resolution")], ["Labels", labels || "—"]],

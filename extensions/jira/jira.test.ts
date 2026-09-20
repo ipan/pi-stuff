@@ -64,7 +64,7 @@ test("parses structured Jira view data for the issue overlay", () => {
 		url: "https://example.atlassian.net/browse/IRS-66465",
 	}] });
 	assert.deepEqual(view, {
-		key: "IRS-66465", summary: "A very long summary", description: "Context\nDetails\nOne",
+		key: "IRS-66465", summary: "A very long summary", description: "# Context\n\nDetails\n\n- One",
 		issueType: "Task", priority: "High", url: "https://example.atlassian.net/browse/IRS-66465",
 		additionalFields: [["Assignee", "Ada"], ["Sprint", "Sprint 1"], ["Reporter", "Lin"], ["Resolution", "Done"], ["Labels", "one, two"]],
 	});

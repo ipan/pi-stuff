@@ -1,5 +1,5 @@
-import type { Theme } from "@earendil-works/pi-coding-agent";
-import { Key, matchesKey, truncateToWidth, wrapTextWithAnsi, type TUI } from "@earendil-works/pi-tui";
+import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
+import { Key, Markdown, matchesKey, truncateToWidth, wrapTextWithAnsi, type TUI } from "@earendil-works/pi-tui";
 import type { JiraViewModel } from "./jira-output.ts";
 
 const BODY_LINES = 8;
@@ -9,6 +9,7 @@ export class JiraIssueOverlay {
 	private scrollTop = 0;
 	private showAdditional = false;
 	private bodyViewport = BODY_LINES;
+	private renderedBody: string[] = [];
 
 	constructor(
 		view: JiraViewModel,
@@ -27,8 +28,8 @@ export class JiraIssueOverlay {
 	private readonly tui: TUI;
 	private readonly done: () => void;
 
-	private bodyLines(): string[] {
-		return this.view.description.split("\n");
+	private bodyLineCount(): number {
+		return this.renderedBody.length || this.view.description.split("\n").length;
 	}
 
 	private footerLines(): string[] {
@@ -41,7 +42,7 @@ export class JiraIssueOverlay {
 	}
 
 	private clampScroll(): void {
-		this.scrollTop = Math.max(0, Math.min(this.scrollTop, Math.max(0, this.bodyLines().length - this.bodyViewport)));
+		this.scrollTop = Math.max(0, Math.min(this.scrollTop, Math.max(0, this.bodyLineCount() - this.bodyViewport)));
 	}
 
 	handleMouse(event: { type: string; wheelDelta?: number }): { handled: boolean; render: boolean } | undefined {
@@ -76,7 +77,7 @@ export class JiraIssueOverlay {
 		} else if (matchesKey(data, Key.home)) {
 			this.scrollTop = 0;
 		} else if (matchesKey(data, Key.end)) {
-			this.scrollTop = this.bodyLines().length;
+			this.scrollTop = this.bodyLineCount();
 		} else {
 			return;
 		}
@@ -94,10 +95,11 @@ export class JiraIssueOverlay {
 		const line = (value: string) => `${border} ${truncateToWidth(value, innerWidth, "", true)} ${border}`;
 		const header = wrapTextWithAnsi(this.theme.fg("accent", this.view.summary), innerWidth);
 		const footer = this.footerLines();
+		this.renderedBody = new Markdown(this.view.description, 0, 0, getMarkdownTheme()).render(innerWidth);
 		const maxHeight = Math.floor((this.tui.terminal?.rows ?? (BODY_LINES + header.length + footer.length + 4)) * 0.6);
 		this.bodyViewport = Math.max(1, maxHeight - header.length - footer.length - 4);
 		this.clampScroll();
-		const body = this.bodyLines().slice(this.scrollTop, this.scrollTop + this.bodyViewport);
+		const body = this.renderedBody.slice(this.scrollTop, this.scrollTop + this.bodyViewport);
 		while (body.length < this.bodyViewport) body.push("");
 		return [
 			this.theme.fg("borderMuted", `╭${horizontal}╮`),
