@@ -5,6 +5,11 @@ import { JiraOutputError, formatMutationResult, formatSearchResult, formatViewRe
 import { TwgError, buildAssignArgs, buildCreateArgs, buildSearchArgs, createTwgClient } from "./twg.ts";
 import { ModelOutputError, convertNaturalLanguageToJql, inferCreateFields } from "./inference.ts";
 import { collectCreateDraft, collectUpdateDraft } from "./prompts.ts";
+import jiti from "/Users/ivan.pan/.asdf/installs/nodejs/26.8.2/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/jiti/lib/jiti.mjs";
+
+const piDirectory = "/Users/ivan.pan/.asdf/installs/nodejs/26.8.2/lib/node_modules/@earendil-works/pi-coding-agent";
+const load = jiti(import.meta.url, { alias: { "@earendil-works/pi-coding-agent": `${piDirectory}/dist/index.js` } });
+const { createJiraCommandHandler } = await load("./index.ts");
 
 test("routes an issue key shorthand and supported verbs", () => {
 	assert.deepEqual(parseJiraCommand("PROJ-123"), { action: "view", key: "PROJ-123" });
@@ -68,4 +73,11 @@ test("reviews inferred create fields and stops on update cancellation", async ()
 	const draft = await collectCreateDraft(scriptedUi(["PAY", "Bug", "Fix cards", "Description", "Skip optional fields"]), { project: "PAY", type: "Bug", summary: "Fix cards" });
 	assert.deepEqual(draft, { project: "PAY", type: "Bug", summary: "Fix cards", description: "Description" });
 	assert.equal(await collectUpdateDraft(scriptedUi(["PROJ-123", undefined])), null);
+});
+
+test("shows JQL and does not query when search confirmation is declined", async () => {
+	let queried = false; const notes: string[] = [];
+	const handler = createJiraCommandHandler({ convertJql: async () => ({ jql: "status = Open", interpretation: "Open issues" }), twg: { search: async () => { queried = true; return {}; } } } as any);
+	await handler("search open issues", { hasUI: true, ui: { ...scriptedUi([false]), notify: (message: string) => notes.push(message) } } as any);
+	assert.equal(queried, false); assert.match(notes.join("\n"), /status = Open/);
 });
