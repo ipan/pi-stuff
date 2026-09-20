@@ -73,6 +73,7 @@ test("reviews inferred create fields and stops on update cancellation", async ()
 	const draft = await collectCreateDraft(scriptedUi(["PAY", "Bug", "Fix cards", "Description", "Skip optional fields"]), { project: "PAY", type: "Bug", summary: "Fix cards" });
 	assert.deepEqual(draft, { project: "PAY", type: "Bug", summary: "Fix cards", description: "Description" });
 	assert.equal(await collectUpdateDraft(scriptedUi(["PROJ-123", undefined])), null);
+	assert.deepEqual(await collectUpdateDraft(scriptedUi(["PROJ-123", "Summary", "New summary", "Priority", "High", "Done"])), { key: "PROJ-123", summary: "New summary", priority: "High" });
 });
 
 test("shows JQL and does not query when search confirmation is declined", async () => {
