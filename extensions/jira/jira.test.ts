@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { JIRA_HELP, isIssueKey, parseJiraCommand } from "./parser.ts";
 import { JiraOutputError, formatMutationResult, formatSearchResult, formatViewResult } from "./jira-output.ts";
 import { TwgError, buildAssignArgs, buildCreateArgs, buildSearchArgs, createTwgClient } from "./twg.ts";
+import { ModelOutputError, convertNaturalLanguageToJql, inferCreateFields } from "./inference.ts";
 
 test("routes an issue key shorthand and supported verbs", () => {
 	assert.deepEqual(parseJiraCommand("PROJ-123"), { action: "view", key: "PROJ-123" });
@@ -49,4 +50,14 @@ test("builds fixed JSON commands with no site override", () => {
 test("normalizes nonzero failures and redacts credentials", async () => {
 	const client = createTwgClient(async () => ({ stdout: "", stderr: "Bearer secret-token", exitCode: 1 }), 1000);
 	await assert.rejects(() => client.view("PROJ-123"), (error: unknown) => error instanceof TwgError && !error.message.includes("secret-token"));
+});
+
+test("returns only high-confidence create inference fields", async () => {
+	const result = await inferCreateFields("context", async () => JSON.stringify({ project: { value: "PAY", confidence: 0.95 }, type: { value: "Bug", confidence: 0.9 }, summary: { value: "Fix cards", confidence: 0.9 }, description: { value: "Maybe", confidence: 0.4 } }));
+	assert.deepEqual(result, { project: "PAY", type: "Bug", summary: "Fix cards" });
+});
+
+test("requires exact JSON JQL output", async () => {
+	await assert.rejects(() => convertNaturalLanguageToJql("my bugs", async () => "```json\n{}\n```"), ModelOutputError);
+	await assert.rejects(() => convertNaturalLanguageToJql("my bugs", async () => "{\"jql\":\"\"}"), ModelOutputError);
 });
