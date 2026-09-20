@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { JIRA_HELP, isIssueKey, parseJiraCommand } from "./parser.ts";
 import { JiraOutputError, formatMutationResult, formatSearchResult, formatViewResult } from "./jira-output.ts";
+import { TwgError, buildAssignArgs, buildCreateArgs, buildSearchArgs, createTwgClient } from "./twg.ts";
 
 test("routes an issue key shorthand and supported verbs", () => {
 	assert.deepEqual(parseJiraCommand("PROJ-123"), { action: "view", key: "PROJ-123" });
@@ -37,4 +38,15 @@ test("renders compact search rows and rejects unknown envelopes", () => {
 	assert.match(formatSearchResult({ data: { items: [{ ...issue, status: { name: "Open" }, updated: "2026-09-19" }] } }), /Open/);
 	assert.throws(() => formatSearchResult({ data: {} }), JiraOutputError);
 	assert.match(formatMutationResult("assign", { data: { item: issue } }), /Assigned.*PROJ-123/);
+});
+
+test("builds fixed JSON commands with no site override", () => {
+	assert.deepEqual(buildSearchArgs("assignee = currentUser()"), ["jira", "workitem", "query", "--jql", "assignee = currentUser()", "--limit", "20", "-o", "json"]);
+	assert.deepEqual(buildAssignArgs("PROJ-123", "me"), ["jira", "workitem", "update", "--id", "PROJ-123", "--assignee", "me", "-o", "json"]);
+	assert.equal(buildCreateArgs({ project: "PROJ", type: "Task", summary: "S", description: "D" }).includes("--site"), false);
+});
+
+test("normalizes nonzero failures and redacts credentials", async () => {
+	const client = createTwgClient(async () => ({ stdout: "", stderr: "Bearer secret-token", exitCode: 1 }), 1000);
+	await assert.rejects(() => client.view("PROJ-123"), (error: unknown) => error instanceof TwgError && !error.message.includes("secret-token"));
 });
