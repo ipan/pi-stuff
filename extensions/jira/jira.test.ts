@@ -8,8 +8,10 @@ import { collectCreateDraft, collectUpdateDraft } from "./prompts.ts";
 import jiti from "/Users/ivan.pan/.asdf/installs/nodejs/26.8.2/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/jiti/lib/jiti.mjs";
 
 const piDirectory = "/Users/ivan.pan/.asdf/installs/nodejs/26.8.2/lib/node_modules/@earendil-works/pi-coding-agent";
-const load = jiti(import.meta.url, { alias: { "@earendil-works/pi-coding-agent": `${piDirectory}/dist/index.js` } });
+const load = jiti(import.meta.url, { alias: { "@earendil-works/pi-coding-agent": `${piDirectory}/dist/index.js`, "@earendil-works/pi-tui": `${piDirectory}/node_modules/@earendil-works/pi-tui/dist/index.js` } });
 const { createJiraCommandHandler } = await load("./index.ts");
+const { JiraIssueOverlay } = await load("./jira-overlay.ts");
+const { visibleWidth } = await load("@earendil-works/pi-tui");
 
 test("routes an issue key shorthand and supported verbs", () => {
 	assert.deepEqual(parseJiraCommand("PROJ-123"), { action: "view", key: "PROJ-123" });
@@ -69,6 +71,32 @@ test("parses structured Jira view data for the issue overlay", () => {
 	assert.deepEqual(parseViewResult({ data: [{ key: "IRS-66465", summary: "Summary" }] }).additionalFields, [["Assignee", "—"], ["Sprint", "—"], ["Reporter", "—"], ["Resolution", "—"], ["Labels", "—"]]);
 	assert.equal(parseViewResult({ data: [{ key: "IRS-66465", summary: "Summary" }] }).url, undefined);
 	assert.throws(() => parseViewResult({ data: {} }), JiraOutputError);
+});
+
+test("renders and controls the Jira issue overlay", () => {
+	const view = parseViewResult({ data: [{ key: "IRS-66465", summary: "A very long summary that should wrap across lines", issuetype: { name: "Task" }, priority: { name: "High" }, description: Array.from({ length: 12 }, (_, index) => `Description line ${index + 1}`).join("\n"), assignee: { displayName: "Ada" }, sprint: { name: "Sprint 1" }, reporter: { displayName: "Lin" }, resolution: { name: "Done" }, labels: ["one", "two"], url: "https://example.atlassian.net/browse/IRS-66465" }] });
+	const tui = { requestRender: () => {} } as any;
+	const theme = { fg: (_name: string, text: string) => text, bold: (text: string) => text } as any;
+	let closed = false;
+	const overlay = new JiraIssueOverlay(view, theme, tui, () => { closed = true; });
+	const initial = overlay.render(50);
+	assert.match(initial.join("\n"), /A very long summary/);
+	assert.match(initial.join("\n"), /Description line 1/);
+	assert.match(initial.join("\n"), /Issue type: Task · Priority: High/);
+	assert.match(initial.join("\n"), /https:\/\/example\.atlassian\.net\/browse\/IRS-66465/);
+	assert.doesNotMatch(initial.join("\n"), /Assignee: Ada/);
+	assert.ok(initial.every((line) => visibleWidth(line) <= 50));
+	overlay.handleInput("\t");
+	assert.match(overlay.render(50).join("\n"), /Assignee: Ada/);
+	assert.match(overlay.render(50).join("\n"), /Labels: one, two/);
+	const beforeScroll = overlay.render(50).join("\n");
+	overlay.handleInput("\x1b[B");
+	const afterScroll = overlay.render(50).join("\n");
+	assert.notEqual(afterScroll, beforeScroll);
+	assert.match(afterScroll, /A very long summary/);
+	assert.match(afterScroll, /Issue type: Task · Priority: High/);
+	overlay.handleInput("\x1b");
+	assert.equal(closed, true);
 });
 
 test("renders compact search rows and rejects unknown envelopes", () => {
