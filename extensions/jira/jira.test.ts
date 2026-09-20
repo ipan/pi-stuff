@@ -144,6 +144,7 @@ test("opens Jira views in TUI overlays and keeps notification fallback elsewhere
 	await handler("irs-66465", { hasUI: true, mode: "tui", ui: { custom: async (factory: any, options: any) => { customOptions = options; rendered = factory({ requestRender: () => {} }, { fg: (_name: string, text: string) => text }, {}, () => {}).render(50).join("\n"); } } } as any);
 	assert.equal(customOptions.overlay, true);
 	assert.equal(customOptions.overlayOptions.anchor, "center");
+	assert.equal(customOptions.overlayOptions.minWidth, 60);
 	assert.match(rendered, /IRS-66465|Build issue/);
 
 	const notes: string[] = [];
