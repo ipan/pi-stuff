@@ -94,3 +94,10 @@ test("cancelled create does not invoke twg", async () => {
 	await handler("create PROJ", { hasUI: true, ui: scriptedUi([undefined]) } as any);
 	assert.equal(created, false);
 });
+
+test("opens inferred required create values in editable editors", async () => {
+	const editorInitials: string[] = [];
+	const ui = { input: async () => "", editor: async (_title: string, initial: string) => { editorInitials.push(initial); return initial || "Description"; }, select: async () => "Skip optional fields", confirm: async () => true, notify: () => {} };
+	await collectCreateDraft(ui, { project: "PAY", type: "Bug", summary: "Fix cards", description: "Investigate" });
+	assert.deepEqual(editorInitials.slice(0, 4), ["PAY", "Bug", "Fix cards", "Investigate"]);
+});
