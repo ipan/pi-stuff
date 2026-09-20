@@ -38,7 +38,7 @@ function description(value: unknown): string {
 	const children = Array.isArray(node.content) ? node.content.map(description).filter(Boolean) : [];
 	if (type === "text") {
 		let text = typeof node.text === "string" ? node.text : "";
-		for (const mark of Array.isArray(node.marks) ? mark : []) {
+		for (const mark of Array.isArray(node.marks) ? node.marks : []) {
 			const name = record(mark)?.type;
 			if (name === "strong") text = `**${text}**`;
 			else if (name === "em") text = `*${text}*`;

@@ -56,7 +56,7 @@ test("parses structured Jira view data for the issue overlay", () => {
 		issuetype: { name: "Task" }, priority: { name: "High" },
 		description: { type: "doc", content: [
 			{ type: "heading", content: [{ type: "text", text: "Context" }] },
-			{ type: "paragraph", content: [{ type: "text", text: "Details" }] },
+			{ type: "paragraph", content: [{ type: "text", text: "Details", marks: [{ type: "code" }] }] },
 			{ type: "bulletList", content: [{ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "One" }] }] }] },
 		] },
 		assignee: { displayName: "Ada" }, sprint: { name: "Sprint 1" }, reporter: { displayName: "Lin" },
@@ -64,7 +64,7 @@ test("parses structured Jira view data for the issue overlay", () => {
 		url: "https://example.atlassian.net/browse/IRS-66465",
 	}] });
 	assert.deepEqual(view, {
-		key: "IRS-66465", summary: "A very long summary", description: "# Context\n\nDetails\n\n- One",
+		key: "IRS-66465", summary: "A very long summary", description: "# Context\n\n`Details`\n\n- One",
 		issueType: "Task", priority: "High", url: "https://example.atlassian.net/browse/IRS-66465",
 		additionalFields: [["Assignee", "Ada"], ["Sprint", "Sprint 1"], ["Reporter", "Lin"], ["Resolution", "Done"], ["Labels", "one, two"]],
 	});
