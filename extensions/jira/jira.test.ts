@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { JIRA_HELP, isIssueKey, parseJiraCommand } from "./parser.ts";
-import { JiraOutputError, formatMutationResult, formatSearchResult, formatViewResult } from "./jira-output.ts";
+import { JiraOutputError, formatMutationResult, formatSearchResult, formatViewResult, parseViewResult } from "./jira-output.ts";
 import { TwgError, buildAssignArgs, buildCreateArgs, buildSearchArgs, buildUpdateArgs, buildViewArgs, createTwgClient } from "./twg.ts";
 import { ModelOutputError, convertNaturalLanguageToJql, inferCreateFields } from "./inference.ts";
 import { collectCreateDraft, collectUpdateDraft } from "./prompts.ts";
@@ -14,6 +14,7 @@ const { createJiraCommandHandler } = await load("./index.ts");
 test("routes an issue key shorthand and supported verbs", () => {
 	assert.deepEqual(parseJiraCommand("PROJ-123"), { action: "view", key: "PROJ-123" });
 	assert.deepEqual(parseJiraCommand("search open bugs"), { action: "search", text: "open bugs" });
+	assert.deepEqual(parseJiraCommand("irs-66465"), { action: "view", key: "IRS-66465" });
 	assert.deepEqual(parseJiraCommand("create ENG"), { action: "create", project: "ENG" });
 	assert.deepEqual(parseJiraCommand("update PROJ-123"), { action: "update", key: "PROJ-123" });
 	assert.deepEqual(parseJiraCommand("comment PROJ-123"), { action: "comment", key: "PROJ-123" });
@@ -45,6 +46,29 @@ test("renders the live twg view envelope and ADF description", () => {
 	const text = formatViewResult({ data: [{ key: "THB-8149", summary: "GenMax Sprint Build", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Generate the build." }] }] }, priority: { name: "Medium" }, assignee: { displayName: "Ivan Pan" }, reporter: { displayName: "Ada" }, resolution: { name: "Done" }, labels: [] }] });
 	assert.match(text, /THB-8149: GenMax Sprint Build/);
 	assert.match(text, /Generate the build\./);
+});
+
+test("parses structured Jira view data for the issue overlay", () => {
+	const view = parseViewResult({ data: [{
+		key: "IRS-66465", summary: "A very long summary",
+		issuetype: { name: "Task" }, priority: { name: "High" },
+		description: { type: "doc", content: [
+			{ type: "heading", content: [{ type: "text", text: "Context" }] },
+			{ type: "paragraph", content: [{ type: "text", text: "Details" }] },
+			{ type: "bulletList", content: [{ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "One" }] }] }] },
+		] },
+		assignee: { displayName: "Ada" }, sprint: { name: "Sprint 1" }, reporter: { displayName: "Lin" },
+		resolution: { name: "Done" }, labels: ["one", "two"],
+		url: "https://example.atlassian.net/browse/IRS-66465",
+	}] });
+	assert.deepEqual(view, {
+		key: "IRS-66465", summary: "A very long summary", description: "Context\nDetails\nOne",
+		issueType: "Task", priority: "High", url: "https://example.atlassian.net/browse/IRS-66465",
+		additionalFields: [["Assignee", "Ada"], ["Sprint", "Sprint 1"], ["Reporter", "Lin"], ["Resolution", "Done"], ["Labels", "one, two"]],
+	});
+	assert.deepEqual(parseViewResult({ data: [{ key: "IRS-66465", summary: "Summary" }] }).additionalFields, [["Assignee", "—"], ["Sprint", "—"], ["Reporter", "—"], ["Resolution", "—"], ["Labels", "—"]]);
+	assert.equal(parseViewResult({ data: [{ key: "IRS-66465", summary: "Summary" }] }).url, undefined);
+	assert.throws(() => parseViewResult({ data: {} }), JiraOutputError);
 });
 
 test("renders compact search rows and rejects unknown envelopes", () => {

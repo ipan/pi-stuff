@@ -3,6 +3,15 @@ export class JiraOutputError extends Error {
 }
 
 type Item = Record<string, unknown>;
+export type JiraViewModel = {
+	key: string;
+	summary: string;
+	description: string;
+	issueType: string;
+	priority: string;
+	url?: string;
+	additionalFields: Array<[label: string, value: string]>;
+};
 const record = (value: unknown): Item | null => value && typeof value === "object" && !Array.isArray(value) ? value as Item : null;
 const field = (item: Item, key: string): string => {
 	const value = item[key];
@@ -24,15 +33,25 @@ function valid(item: Item): Item {
 function description(value: unknown): string {
 	if (typeof value === "string") return value;
 	const node = record(value);
-	if (!node) return "Description: —";
+	if (!node) return "";
 	const text = typeof node.text === "string" ? node.text : "";
-	const children = Array.isArray(node.content) ? node.content.map(description).filter((part) => part !== "Description: —").join("\n") : "";
-	return [text, children].filter(Boolean).join("\n") || "Description: —";
+	const children = Array.isArray(node.content) ? node.content.map(description).filter(Boolean).join("\n") : "";
+	return [text, children].filter(Boolean).join("\n");
 }
-export function formatViewResult(payload: unknown): string {
+export function parseViewResult(payload: unknown): JiraViewModel {
 	const item = valid(items(payload)[0] ?? {});
 	const labels = Array.isArray(item.labels) ? item.labels.filter((x): x is string => typeof x === "string").join(", ") : "";
-	return [`${field(item, "key")}: ${field(item, "summary")}`, `Priority: ${field(item, "priority")} · Assignee: ${field(item, "assignee")} · Sprint: ${field(item, "sprint")}`, `Reporter: ${field(item, "reporter")} · Resolution: ${field(item, "resolution")}`, `Labels: ${labels || "—"}`, description(item.description), typeof item.url === "string" ? item.url : ""].filter(Boolean).join("\n");
+	return {
+		key: field(item, "key"), summary: field(item, "summary"), description: description(item.description) || "—",
+		issueType: field(item, "issuetype"), priority: field(item, "priority"),
+		url: typeof item.url === "string" ? item.url : undefined,
+		additionalFields: [["Assignee", field(item, "assignee")], ["Sprint", field(item, "sprint")], ["Reporter", field(item, "reporter")], ["Resolution", field(item, "resolution")], ["Labels", labels || "—"]],
+	};
+}
+export function formatViewResult(payload: unknown): string {
+	const view = parseViewResult(payload);
+	const [assignee, sprint, reporter, resolution, labels] = view.additionalFields.map(([, value]) => value);
+	return [`${view.key}: ${view.summary}`, `Priority: ${view.priority} · Assignee: ${assignee} · Sprint: ${sprint}`, `Reporter: ${reporter} · Resolution: ${resolution}`, `Labels: ${labels}`, view.description === "—" ? "Description: —" : view.description, view.url ?? ""].filter(Boolean).join("\n");
 }
 export function formatSearchResult(payload: unknown): string {
 	const results = items(payload); if (!results.length) return "No Jira work items found.";
