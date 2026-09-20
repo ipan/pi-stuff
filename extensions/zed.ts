@@ -1,14 +1,13 @@
 /**
  * Zed Extension
  *
- * Registers a `/zed` command that opens the current working directory (or a
- * chosen set of paths) in the Zed editor.
+ * Registers a `/zed` command that opens the current session working directory
+ * or one explicit directory in Zed.
  *
  * Usage:
  *
- *     /zed                 Open the current working directory
- *     /zed <path>...       Open one or more files or directories
- *     /zed <path>:line:col Open a file at a given line/column
+ *     /zed             Open the current session working directory
+ *     /zed <directory> Open one directory
  *
  * Extra flags are forwarded to the `zed` binary, e.g. `--new` (-n),
  * `--add` (-a), `--existing` (-e), and `--wait` (-w). Without `--wait` the
@@ -18,8 +17,8 @@
 
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { spawn } from "node:child_process";
+import { stat } from "node:fs/promises";
 import * as path from "node:path";
-import { createRecentFiles, recordChangedFile } from "./zed-tools.mjs";
 
 type Level = "info" | "warning" | "error";
 
@@ -46,10 +45,8 @@ function tokenize(input: string): string[] {
 }
 
 interface ParsedZedArgs {
-	/** Positional path arguments (empty means "use the cwd"). */
+	/** Positional directory arguments (empty means "use the cwd"). */
 	paths: string[];
-	/** Whether the caller asked to open files changed by Pi's agent. */
-	recent: boolean;
 	/** Flags forwarded unchanged to the zed binary. */
 	zedFlags: string[];
 	/** Whether the caller asked zed to block until it closes. */
@@ -59,7 +56,6 @@ interface ParsedZedArgs {
 function parseArgs(tokens: string[]): ParsedZedArgs {
 	const paths: string[] = [];
 	const zedFlags: string[] = [];
-	let recent = false;
 	let wait = false;
 
 	for (const token of tokens) {
@@ -71,24 +67,31 @@ function parseArgs(tokens: string[]): ParsedZedArgs {
 			}
 			continue;
 		}
-		if (token === "recent" && paths.length === 0 && !recent) {
-			recent = true;
-			continue;
-		}
 		paths.push(token);
 	}
 
-	return { paths, recent, zedFlags, wait };
+	return { paths, zedFlags, wait };
 }
 
-/** Fall back to the cwd when no path was given; otherwise resolve relative paths. */
-function resolveTargets(cwd: string, paths: string[]): string[] {
-	if (paths.length === 0) {
-		return [cwd];
+export async function resolveZedDirectory(cwd: string, paths: string[]): Promise<string> {
+	if (paths.length > 1) {
+		throw new Error("/zed accepts at most one directory.");
 	}
-	return paths.map((candidate) =>
-		path.isAbsolute(candidate) ? candidate : path.resolve(cwd, candidate),
-	);
+
+	const target = paths.length === 0 ? cwd : path.resolve(cwd, paths[0]);
+	const info = await stat(target);
+	if (!info.isDirectory()) {
+		throw new Error(`Path is not a directory: ${target}`);
+	}
+	return target;
+}
+
+export function buildSpawnArgs(zedFlags: string[], targets: string[], wait: boolean): string[] {
+	const args = [...zedFlags];
+	if (wait && !args.includes("--wait") && !args.includes("-w")) {
+		args.push("--wait");
+	}
+	return [...args, ...targets];
 }
 
 function labelFor(paths: string[]): string {
@@ -98,35 +101,20 @@ function labelFor(paths: string[]): string {
 }
 
 export default function (pi: ExtensionAPI): void {
-	const recentFiles = createRecentFiles();
-
-	pi.on("tool_execution_end", async (event, ctx) => {
-		if (event.isError || (event.toolName !== "write" && event.toolName !== "edit")) {
-			return;
-		}
-
-		const input = event.args as { path?: unknown } | undefined;
-		if (typeof input?.path !== "string") {
-			return;
-		}
-
-		recordChangedFile(recentFiles, path.resolve(ctx.cwd, input.path));
-	});
-
 	pi.registerCommand("zed", {
 		description:
-			"Open the current working directory, given paths, or recent agent-changed files in Zed. Usage: /zed [recent|paths] [--new|-n|--add|-a|--existing|-e|--wait|-w]",
+			"Open the current working directory or one directory in Zed. Usage: /zed [directory] [--new|-n|--add|-a|--existing|-e|--wait|-w]",
 		handler: async (args, ctx) => {
-			const { paths, recent, zedFlags, wait } = parseArgs(tokenize(args.trim()));
-			if (recent && recentFiles.length === 0) {
-				notify(ctx, "No files have been changed by the agent in this session.", "info");
+			const { paths, zedFlags, wait } = parseArgs(tokenize(args.trim()));
+			let target: string;
+			try {
+				target = await resolveZedDirectory(ctx.cwd, paths);
+			} catch (error) {
+				notify(ctx, error instanceof Error ? error.message : "Unable to resolve Zed directory.", "error");
 				return;
 			}
-			const targets = recent ? recentFiles : resolveTargets(ctx.cwd, paths);
-			const spawnArgs = [...zedFlags, ...targets];
-			if (wait && !spawnArgs.includes("--wait") && !spawnArgs.includes("-w")) {
-				spawnArgs.push("--wait");
-			}
+			const targets = [target];
+			const spawnArgs = buildSpawnArgs(zedFlags, targets, wait);
 
 			// Blocking mode: run zed in the foreground of this handler and wait
 			// for its window to close before reporting back.
