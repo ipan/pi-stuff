@@ -52,7 +52,7 @@ Create collects or infers:
 - optional labels
 - optional parent
 
-The extension attempts to infer project, summary, and description independently from recent session context. Each inferred value is proposed in an editable field only when confidence is conservatively high; otherwise that individual field is prompted. Inference never silently creates an issue.
+The extension attempts to infer project, issue type, summary, and description independently from recent session context. Each inferred value is proposed in an editable field only when confidence is conservatively high; otherwise that individual field is prompted. Inference never silently creates an issue.
 
 ### Update
 
@@ -128,7 +128,7 @@ Responsibilities:
 - `index.ts` registers `/jira`, coordinates parsing, prompts, model calls, confirmation, execution, and rendering.
 - `parser.ts` parses friendly subcommands and positional values without shell evaluation.
 - `prompts.ts` centralizes missing-value collection, editable inference review, and operation-specific confirmation text.
-- `inference.ts` reads recent active-session context and requests strict model JSON for project, summary, and description plus confidence values.
+- `inference.ts` reads recent active-session context and requests strict model JSON for project, issue type, summary, and description plus confidence values.
 - `jql.ts` requests and validates strict model JSON containing JQL and a concise interpretation.
 - `twg.ts` invokes `twg` via an argument array, requests JSON, captures stdout/stderr, enforces a timeout, and normalizes failures.
 - `jira-output.ts` validates expected JSON shapes and renders selected view fields, compact search rows, and mutation summaries.
@@ -137,7 +137,7 @@ Responsibilities:
 
 1. Parse `/jira` input.
 2. Route an issue-key shorthand to view, route an explicit supported verb, or show help.
-3. Collect missing fields. For create, infer project, summary, and description from recent context when reliable and present inferred values for editing.
+3. Collect missing fields. For create, infer project, issue type, summary, and description from recent context when reliable and present inferred values for editing.
 4. For search, invoke the active model for JQL conversion; validate and display its interpretation and JQL.
 5. Require confirmation before search execution and every mutation: create, update, comment, and assign.
 6. On cancellation, stop successfully without spawning a query or mutation command.
@@ -154,7 +154,7 @@ Coverage includes:
 
 - issue-key shorthand, explicit subcommands, unsupported commands, and help output
 - missing-field prompts and per-field context-inference fallback
-- editable inferred project, summary, and description values
+- editable inferred project, issue type, summary, and description values
 - create optional fields
 - update's selected field set and assign's assignee-only flow
 - JQL structured-response validation, display, confirmation, and cancellation
