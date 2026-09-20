@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import type { TuiMouseEvent, TuiMouseEventResult } from "@earendil-works/pi-tui";
 import { parseUnifiedDiff } from "./diff-tools.mjs";
 
 type DiffRow = ReturnType<typeof parseUnifiedDiff>[number];
@@ -9,6 +10,10 @@ type SearchTarget = "files" | "diff";
 
 function notify(ctx: ExtensionCommandContext, message: string, level: "info" | "warning" | "error"): void {
 	if (ctx.hasUI) ctx.ui.notify(message, level);
+}
+
+function getWheelScroll(event: TuiMouseEvent): number {
+	return event.type === "wheel" ? event.wheelDelta ?? 0 : 0;
 }
 
 function isGitWorkTree(result: { code: number; stdout: string }): boolean {
@@ -105,6 +110,23 @@ class DiffViewer {
 			}
 		}
 		this.requestRender();
+	}
+
+	handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
+		const delta = getWheelScroll(event);
+		if (delta === 0) return undefined;
+
+		const panelWidth = this.panelVisible ? Math.min(32, Math.max(22, Math.floor(event.width * 0.28))) : 0;
+		if (this.panelVisible && event.x < panelWidth) {
+			this.panelFocused = true;
+			this.jumpToFile(this.selectedFile + delta);
+		} else {
+			this.panelFocused = false;
+			const maxOffset = Math.max(0, this.rows.length - this.pageSize);
+			this.offset = Math.max(0, Math.min(maxOffset, this.offset + delta));
+		}
+		this.requestRender();
+		return { handled: true, focus: true };
 	}
 
 	handleInput(data: string): void {

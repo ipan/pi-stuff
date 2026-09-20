@@ -10,6 +10,11 @@ export function getFileSections(rows, untracked = new Set()) {
 	);
 }
 
+export function getWheelScroll(event, _panelWidth) {
+	if (event.type !== "wheel") return 0;
+	return event.wheelDelta ?? 0;
+}
+
 export function parseUnifiedDiff(diff) {
 	const rows = [];
 	let oldLine = 0;
