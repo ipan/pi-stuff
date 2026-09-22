@@ -4,7 +4,7 @@ import { JIRA_HELP, isIssueKey, parseJiraCommand } from "./parser.ts";
 import { JiraOutputError, formatMutationResult, formatSearchResult, formatViewResult, parseViewResult } from "./jira-output.ts";
 import { TwgError, buildAssignArgs, buildCreateArgs, buildSearchArgs, buildUpdateArgs, buildViewArgs, createTwgClient } from "./twg.ts";
 import { ModelOutputError, convertNaturalLanguageToJql, draftComment, draftCreateFields, draftUpdateFields, inferCreateFields } from "./inference.ts";
-import { collectCreateDraft, collectUpdateDraft } from "./prompts.ts";
+import { collectCreateDraft, collectUpdateDraft, previewDraft } from "./prompts.ts";
 import jiti from "/Users/ivan.pan/.asdf/installs/nodejs/26.8.2/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/jiti/lib/jiti.mjs";
 
 const piDirectory = "/Users/ivan.pan/.asdf/installs/nodejs/26.8.2/lib/node_modules/@earendil-works/pi-coding-agent";
@@ -159,6 +159,12 @@ test("rejects untrusted or incomplete update and comment proposals", async () =>
 });
 
 const scriptedUi = (answers: Array<string | boolean | undefined>) => ({ input: async (_title: string, initial = "") => answers.shift() as string | undefined ?? initial, editor: async (_title: string, initial = "") => answers.shift() as string | undefined ?? initial, select: async () => answers.shift() as string | undefined, confirm: async () => answers.shift() as boolean | undefined, notify: () => {} });
+test("preview returns edit, confirm, or cancel", async () => {
+	assert.equal(await previewDraft(scriptedUi(["Edit"]) as any, { title: "Update PROJ-1", content: "Summary: New", rationale: "Latest change" }), "edit");
+	assert.equal(await previewDraft(scriptedUi(["Confirm"]) as any, { title: "Comment on PROJ-1", content: "Done", rationale: "Verification" }), "confirm");
+	assert.equal(await previewDraft(scriptedUi([undefined]) as any, { title: "Create", content: "Task", rationale: "Design" }), "cancel");
+});
+
 test("reviews inferred create fields and stops on update cancellation", async () => {
 	const draft = await collectCreateDraft(scriptedUi(["PAY", "Bug", "Fix cards", "Description", "Skip optional fields"]), { project: "PAY", type: "Bug", summary: "Fix cards" });
 	assert.deepEqual(draft, { project: "PAY", type: "Bug", summary: "Fix cards", description: "Description" });
@@ -194,6 +200,16 @@ test("rejects updates without fields and malformed twg JSON", async () => {
 	assert.throws(() => buildUpdateArgs({ key: "PROJ-123" }), TwgError);
 	const client = createTwgClient(async () => ({ stdout: "not-json", stderr: "", exitCode: 0 }));
 	await assert.rejects(() => client.view("PROJ-123"), /malformed JSON/);
+});
+
+test("instructed update fetches before drafting and does not mutate after a fetch failure", async () => {
+	let drafted = false, updated = false;
+	const notes: string[] = [];
+	const handler = createJiraCommandHandler({ twg: { view: async () => { throw new TwgError("twg failed: unavailable"); }, update: async () => { updated = true; return {}; } }, draftUpdate: async () => { drafted = true; return { summary: "x", rationale: "x" }; } } as any);
+	await handler("update PROJ-1 based on latest change", { hasUI: true, ui: { ...scriptedUi([]), notify: (message: string) => notes.push(message) } } as any);
+	assert.equal(drafted, false);
+	assert.equal(updated, false);
+	assert.match(notes.join("\n"), /unavailable/);
 });
 
 test("cancelled create does not invoke twg", async () => {
