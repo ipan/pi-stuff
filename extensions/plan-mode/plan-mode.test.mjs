@@ -152,3 +152,51 @@ test("save-plan writes only after editor and confirmation approve it", async () 
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+function createLifecycleHarness({ active = ["read", "bash"], all = ["read", "grep", "find", "ls", "bash"], flag = false } = {}) {
+  const commands = new Map();
+  const handlers = new Map();
+  const setActiveTools = [];
+  const statuses = [];
+  const notifications = [];
+  const entries = [];
+  planModeExtension({
+    registerFlag: () => {}, registerShortcut: () => {},
+    registerCommand: (name, command) => commands.set(name, command),
+    on: (name, handler) => handlers.set(name, handler),
+    getActiveTools: () => active,
+    getAllTools: () => all.map((name) => ({ name })),
+    setActiveTools: (tools) => setActiveTools.push(tools),
+    appendEntry: (...entry) => entries.push(entry), getFlag: () => flag,
+  });
+  const context = (branch) => ({
+    hasUI: true, cwd: "/repo", mode: "tui", waitForIdle: async () => {},
+    sessionManager: { getBranch: () => branch },
+    ui: { setStatus: (_key, value) => statuses.push(value), notify: (message) => notifications.push(message) },
+  });
+  return { commands, context, entries, handlers, notifications, setActiveTools, statuses };
+}
+
+test("restores plan-mode state idempotently and restores only available tools on exit", async () => {
+  const enabled = createLifecycleHarness();
+  const branch = [{ type: "custom", customType: PLAN_MODE_STATE_TYPE, data: { enabled: true, restoreTools: ["read", "bash", "removed-tool"] } }];
+  await enabled.handlers.get("session_start")({}, enabled.context(branch));
+  assert.deepEqual(enabled.setActiveTools, [["read", "grep", "find", "ls"]]);
+  assert.deepEqual(enabled.statuses, ["PLAN"]);
+  assert.deepEqual(enabled.entries, []);
+  await enabled.commands.get("plan").handler("off", enabled.context(branch));
+  assert.deepEqual(enabled.setActiveTools.at(-1), ["read", "bash"]);
+  assert.equal(enabled.notifications.at(-1), "Plan mode disabled: previous tools restored.");
+
+  const disabled = createLifecycleHarness();
+  await disabled.handlers.get("session_start")({}, disabled.context([{ type: "custom", customType: PLAN_MODE_STATE_TYPE, data: { enabled: false, restoreTools: ["read"] } }]));
+  assert.deepEqual(disabled.setActiveTools, []);
+  assert.deepEqual(disabled.statuses, [undefined]);
+});
+
+test("documents plan controls and their shell safety boundary", async () => {
+  const readme = await readFile(new URL("../../README.md", import.meta.url), "utf8");
+  for (const text of ["/plan", "--plan", "/save-plan", "explicitly confirm", "every user shell command"]) {
+    assert.match(readme, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+});

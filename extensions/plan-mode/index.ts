@@ -50,9 +50,11 @@ export default function (pi: ExtensionAPI): void {
 
 	const activate = (restoreTools: readonly string[], ctx: ExtensionContext, persist: boolean): void => {
 		state = createPlanModeState(true, restoreTools);
-		pi.setActiveTools(activePlanTools(allToolNames()));
+		const safeTools = activePlanTools(allToolNames());
+		pi.setActiveTools(safeTools);
 		if (persist) pi.appendEntry(PLAN_MODE_STATE_TYPE, state);
 		updateStatus(ctx, true);
+		if (safeTools.length === 0) notify(ctx, "Plan mode is active but no read-only tools are available.", "warning");
 	};
 
 	const deactivate = (ctx: ExtensionContext, persist: boolean): void => {

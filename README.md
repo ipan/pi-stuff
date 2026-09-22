@@ -22,6 +22,7 @@ Resources live in conventional directories and are declared in the `pi` key of
   directory (or one explicit directory) in [Zed](https://zed.dev). Launched
   detached so the agent keeps control; add `--wait` to block until the editor
   closes.
+- [`plan-mode`](extensions/plan-mode/) - session-scoped read-only planning and explicit plan export; see [Plan mode](#plan-mode).
 - [`jira`](extensions/jira/) - `/jira` manages Jira Cloud work items through
   the locally configured `twg` OAuth session. Use `/jira PROJ-123` to open a
   scrollable TUI view (60% terminal height; mouse wheel scrolls the description,
@@ -34,6 +35,12 @@ Resources live in conventional directories and are declared in the `pi` key of
   edit, or cancel. `/jira create`, `/jira update PROJ-123`, and `/jira comment
   PROJ-123` retain manual workflows. Every write requires final confirmation.
   Run `twg login` if authentication is unavailable.
+
+### Plan mode
+
+Load `extensions/plan-mode/index.ts` (or install this package) and use `/plan`, `/plan on`, `/plan off`, or `Ctrl+Shift+P` to control the session-scoped mode. Start a session in it with `pi --plan`.
+
+Plan mode leaves only `read`, `grep`, `find`, and `ls` active. It blocks all LLM mutation tools and every user shell command (`!` and `!!`); it does not try to infer whether a shell command is safe. Use `/save-plan [docs/plans/name.md]` to edit and explicitly confirm a Markdown export. The export refuses paths outside the workspace and refuses to overwrite an existing file.
 
 ## Adding a resource
 
