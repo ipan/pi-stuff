@@ -27,10 +27,13 @@ Resources live in conventional directories and are declared in the `pi` key of
   scrollable TUI view (60% terminal height; mouse wheel scrolls the description,
   Tab toggles additional fields in the dynamic footer, Esc closes it, and the
   full Jira URL is clickable when supported); non-TUI modes use compact output.
-  Use `/jira search open bugs assigned to me` to generate and confirm JQL, or
-  `/jira create`, `/jira update PROJ-123`, `/jira comment PROJ-123`, and
-  `/jira assign PROJ-123` for confirmed interactive operations. Run `twg login`
-  if authentication is unavailable.
+  Use `/jira search open bugs assigned to me` to generate and confirm JQL.
+  `/jira create PROJ <instruction>` drafts a task from the instruction and current
+  session; `/jira update PROJ-123 <instruction>` and `/jira comment PROJ-123
+  <instruction>` first read the issue, then offer a grounded draft to confirm,
+  edit, or cancel. `/jira create`, `/jira update PROJ-123`, and `/jira comment
+  PROJ-123` retain manual workflows. Every write requires final confirmation.
+  Run `twg login` if authentication is unavailable.
 
 ## Adding a resource
 

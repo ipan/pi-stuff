@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { JIRA_HELP, isIssueKey, parseJiraCommand } from "./parser.ts";
 import { JiraOutputError, formatMutationResult, formatSearchResult, formatViewResult, parseViewResult } from "./jira-output.ts";
-import { TwgError, buildAssignArgs, buildCreateArgs, buildSearchArgs, buildUpdateArgs, buildViewArgs, createTwgClient } from "./twg.ts";
-import { ModelOutputError, convertNaturalLanguageToJql, inferCreateFields } from "./inference.ts";
-import { collectCreateDraft, collectUpdateDraft } from "./prompts.ts";
+import { TwgError, buildCreateArgs, buildSearchArgs, buildUpdateArgs, buildViewArgs, createTwgClient } from "./twg.ts";
+import { ModelOutputError, convertNaturalLanguageToJql, draftComment, draftCreateFields, draftUpdateFields, inferCreateFields } from "./inference.ts";
+import { collectCreateDraft, collectUpdateDraft, previewDraft } from "./prompts.ts";
 import jiti from "/Users/ivan.pan/.asdf/installs/nodejs/26.8.2/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/jiti/lib/jiti.mjs";
 
 const piDirectory = "/Users/ivan.pan/.asdf/installs/nodejs/26.8.2/lib/node_modules/@earendil-works/pi-coding-agent";
@@ -18,9 +18,12 @@ test("routes an issue key shorthand and supported verbs", () => {
 	assert.deepEqual(parseJiraCommand("search open bugs"), { action: "search", text: "open bugs" });
 	assert.deepEqual(parseJiraCommand("irs-66465"), { action: "view", key: "IRS-66465" });
 	assert.deepEqual(parseJiraCommand("create ENG"), { action: "create", project: "ENG" });
+	assert.deepEqual(parseJiraCommand("create PROJ based on the current design"), { action: "create", project: "PROJ", instruction: "based on the current design" });
+	assert.deepEqual(parseJiraCommand("create based on the current design"), { action: "create", instruction: "based on the current design" });
 	assert.deepEqual(parseJiraCommand("update PROJ-123"), { action: "update", key: "PROJ-123" });
+	assert.deepEqual(parseJiraCommand("update PROJ-1234 update based on the latest change"), { action: "update", key: "PROJ-1234", instruction: "update based on the latest change" });
 	assert.deepEqual(parseJiraCommand("comment PROJ-123"), { action: "comment", key: "PROJ-123" });
-	assert.deepEqual(parseJiraCommand("assign PROJ-123"), { action: "assign", key: "PROJ-123" });
+	assert.deepEqual(parseJiraCommand("comment PROJ-1234 summarize `PROJ-99`"), { action: "comment", key: "PROJ-1234", instruction: "summarize `PROJ-99`" });
 });
 
 test("empty, help, unsupported, and malformed shorthand route to help", () => {
@@ -30,6 +33,9 @@ test("empty, help, unsupported, and malformed shorthand route to help", () => {
 	assert.equal(isIssueKey("PROJ-123"), true);
 	assert.equal(isIssueKey("PROJ-"), false);
 	assert.match(JIRA_HELP, /\/jira search <natural-language request>/);
+	assert.match(JIRA_HELP, /\/jira create \[PROJECT\] <instruction>/);
+	assert.match(JIRA_HELP, /\/jira update \[PROJ-123\] <instruction>/);
+	assert.match(JIRA_HELP, /\/jira comment \[PROJ-123\] <instruction>/);
 });
 
 const issue = {
@@ -108,13 +114,13 @@ test("renders and controls the Jira issue overlay", () => {
 test("renders compact search rows and rejects unknown envelopes", () => {
 	assert.match(formatSearchResult({ data: { items: [{ ...issue, status: { name: "Open" }, updated: "2026-09-19" }] } }), /Open/);
 	assert.throws(() => formatSearchResult({ data: {} }), JiraOutputError);
-	assert.match(formatMutationResult("assign", { data: { item: issue } }), /Assigned.*PROJ-123/);
+	assert.match(formatMutationResult("update", { data: { item: issue } }), /Updated.*PROJ-123/);
 	assert.match(formatMutationResult("update", issue), /Updated.*PROJ-123/);
 });
 
 test("builds fixed JSON commands with no site override", () => {
 	assert.deepEqual(buildSearchArgs("assignee = currentUser()"), ["jira", "workitem", "query", "--jql", "assignee = currentUser()", "--limit", "20", "-o", "json", "--output-summary", "none"]);
-	assert.deepEqual(buildAssignArgs("PROJ-123", "me"), ["jira", "workitem", "update", "--id", "PROJ-123", "--assignee", "me", "-o", "json", "--output-summary", "none"]);
+	assert.equal(parseJiraCommand("assign PROJ-123").action, "help");
 	assert.deepEqual(buildViewArgs("THB-8149").slice(-4), ["-o", "json", "--output-summary", "none"]);
 	assert.equal(buildCreateArgs({ project: "PROJ", type: "Task", summary: "S", description: "D" }).includes("--site"), false);
 });
@@ -134,7 +140,31 @@ test("requires exact JSON JQL output", async () => {
 	await assert.rejects(() => convertNaturalLanguageToJql("my bugs", async () => "{\"jql\":\"\"}"), ModelOutputError);
 });
 
+const modelJson = (value: unknown) => async () => JSON.stringify(value);
+test("accepts a complete create proposal and puts the instruction in the prompt", async () => {
+	let prompt = "";
+	const proposal = await draftCreateFields({ instruction: "based on the current design", session: "user: Design accepted" }, async (input) => {
+		prompt = input;
+		return JSON.stringify({ project: "PROJ", type: "Task", summary: "Implement design", description: "Build the approved design.", rationale: "Matches the accepted design." });
+	});
+	assert.equal(proposal.summary, "Implement design");
+	assert.match(prompt, /based on the current design/);
+	assert.match(prompt, /user: Design accepted/);
+});
+
+test("rejects untrusted or incomplete update and comment proposals", async () => {
+	await assert.rejects(() => draftUpdateFields({ instruction: "update it", session: "", issue: "PROJ-1" }, modelJson({ summary: "x", transition: "Done", rationale: "x" })), ModelOutputError);
+	await assert.rejects(() => draftComment({ instruction: "comment", session: "", issue: "PROJ-1" }, modelJson({ body: "", rationale: "x" })), ModelOutputError);
+	await assert.rejects(() => draftComment({ instruction: "comment", session: "", issue: "PROJ-1" }, async () => "Here is JSON: {}"), ModelOutputError);
+});
+
 const scriptedUi = (answers: Array<string | boolean | undefined>) => ({ input: async (_title: string, initial = "") => answers.shift() as string | undefined ?? initial, editor: async (_title: string, initial = "") => answers.shift() as string | undefined ?? initial, select: async () => answers.shift() as string | undefined, confirm: async () => answers.shift() as boolean | undefined, notify: () => {} });
+test("preview returns edit, confirm, or cancel", async () => {
+	assert.equal(await previewDraft(scriptedUi(["Edit"]) as any, { title: "Update PROJ-1", content: "Summary: New", rationale: "Latest change" }), "edit");
+	assert.equal(await previewDraft(scriptedUi(["Confirm"]) as any, { title: "Comment on PROJ-1", content: "Done", rationale: "Verification" }), "confirm");
+	assert.equal(await previewDraft(scriptedUi([undefined]) as any, { title: "Create", content: "Task", rationale: "Design" }), "cancel");
+});
+
 test("reviews inferred create fields and stops on update cancellation", async () => {
 	const draft = await collectCreateDraft(scriptedUi(["PAY", "Bug", "Fix cards", "Description", "Skip optional fields"]), { project: "PAY", type: "Bug", summary: "Fix cards" });
 	assert.deepEqual(draft, { project: "PAY", type: "Bug", summary: "Fix cards", description: "Description" });
@@ -170,6 +200,16 @@ test("rejects updates without fields and malformed twg JSON", async () => {
 	assert.throws(() => buildUpdateArgs({ key: "PROJ-123" }), TwgError);
 	const client = createTwgClient(async () => ({ stdout: "not-json", stderr: "", exitCode: 0 }));
 	await assert.rejects(() => client.view("PROJ-123"), /malformed JSON/);
+});
+
+test("instructed update fetches before drafting and does not mutate after a fetch failure", async () => {
+	let drafted = false, updated = false;
+	const notes: string[] = [];
+	const handler = createJiraCommandHandler({ twg: { view: async () => { throw new TwgError("twg failed: unavailable"); }, update: async () => { updated = true; return {}; } }, draftUpdate: async () => { drafted = true; return { summary: "x", rationale: "x" }; } } as any);
+	await handler("update PROJ-1 based on latest change", { hasUI: true, ui: { ...scriptedUi([]), notify: (message: string) => notes.push(message) } } as any);
+	assert.equal(drafted, false);
+	assert.equal(updated, false);
+	assert.match(notes.join("\n"), /unavailable/);
 });
 
 test("cancelled create does not invoke twg", async () => {

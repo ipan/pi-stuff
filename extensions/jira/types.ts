@@ -1,13 +1,18 @@
-export type JiraAction = "help" | "view" | "search" | "create" | "update" | "comment" | "assign";
+export type JiraAction = "help" | "view" | "search" | "create" | "update" | "comment";
 
 export type ParsedJiraCommand =
 	| { action: "help" }
 	| { action: "view"; key: string }
 	| { action: "search"; text: string }
-	| { action: "create"; project?: string }
-	| { action: "update"; key?: string }
-	| { action: "comment"; key?: string }
-	| { action: "assign"; key?: string };
+	| { action: "create"; project?: string; instruction?: string }
+	| { action: "update"; key?: string; instruction?: string }
+	| { action: "comment"; key?: string; instruction?: string };
+
+export type DraftPreview = {
+	title: string;
+	content: string;
+	rationale: string;
+};
 
 export type CreateDraft = {
 	project: string;
@@ -28,6 +33,16 @@ export type UpdateDraft = {
 	assignee?: string;
 	sprint?: string;
 };
+
+export type JiraDraftContext = {
+	instruction: string;
+	session: string;
+	issue?: string;
+};
+
+export type CreateDraftProposal = CreateDraft & { rationale: string };
+export type UpdateDraftProposal = Omit<UpdateDraft, "key"> & { rationale: string };
+export type CommentDraftProposal = { body: string; rationale: string };
 
 export type ModelJson = (prompt: string) => Promise<string>;
 

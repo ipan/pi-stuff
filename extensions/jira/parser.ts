@@ -4,10 +4,9 @@ export const JIRA_HELP = [
 	"Jira work items via the configured twg site:",
 	"/jira PROJ-123                 View a work item",
 	"/jira search <natural-language request>",
-	"/jira create [PROJECT]",
-	"/jira update [PROJ-123]",
-	"/jira comment [PROJ-123]",
-	"/jira assign [PROJ-123]",
+	"/jira create [PROJECT] <instruction>",
+	"/jira update [PROJ-123] <instruction>",
+	"/jira comment [PROJ-123] <instruction>",
 ].join("\n");
 
 export function isIssueKey(value: string): boolean {
@@ -25,8 +24,10 @@ export function parseJiraCommand(args: string): ParsedJiraCommand {
 	const shorthandKey = normalizedIssueKey(trimmed);
 	if (shorthandKey) return { action: "view", key: shorthandKey };
 
-	const [verb, ...rest] = trimmed.split(/\s+/u);
-	const value = rest.join(" ").trim();
+	const match = /^(\S+)(?:\s+([\s\S]*))?$/u.exec(trimmed);
+	if (!match) return { action: "help" };
+	const [, verb, remainder = ""] = match;
+	const value = remainder.trim();
 	switch (verb) {
 		case "view": {
 			const key = normalizedIssueKey(value);
@@ -34,13 +35,21 @@ export function parseJiraCommand(args: string): ParsedJiraCommand {
 		}
 		case "search":
 			return value ? { action: "search", text: value } : { action: "help" };
-		case "create":
-			return value && !/\s/u.test(value) ? { action: "create", project: value } : { action: "create" };
+		case "create": {
+			if (!value) return { action: "create" };
+			const [first, ...rest] = value.split(/\s+/u);
+			const instruction = rest.join(" ").trim();
+			if (/^[A-Z][A-Z0-9]+$/u.test(first)) return { action: "create", project: first, ...(instruction ? { instruction } : {}) };
+			return { action: "create", instruction: value };
+		}
 		case "update":
-		case "comment":
-		case "assign": {
-			const key = normalizedIssueKey(value);
-			return value && !key ? { action: "help" } : { action: verb, ...(key ? { key } : {}) };
+		case "comment": {
+			if (!value) return { action: verb };
+			const [first, ...rest] = value.split(/\s+/u);
+			const key = normalizedIssueKey(first);
+			if (!key) return { action: "help" };
+			const instruction = rest.join(" ").trim();
+			return { action: verb, key, ...(instruction ? { instruction } : {}) };
 		}
 		default:
 			return { action: "help" };
