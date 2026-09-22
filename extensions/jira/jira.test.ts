@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { JIRA_HELP, isIssueKey, parseJiraCommand } from "./parser.ts";
 import { JiraOutputError, formatMutationResult, formatSearchResult, formatViewResult, parseViewResult } from "./jira-output.ts";
-import { TwgError, buildAssignArgs, buildCreateArgs, buildSearchArgs, buildUpdateArgs, buildViewArgs, createTwgClient } from "./twg.ts";
+import { TwgError, buildCreateArgs, buildSearchArgs, buildUpdateArgs, buildViewArgs, createTwgClient } from "./twg.ts";
 import { ModelOutputError, convertNaturalLanguageToJql, draftComment, draftCreateFields, draftUpdateFields, inferCreateFields } from "./inference.ts";
 import { collectCreateDraft, collectUpdateDraft, previewDraft } from "./prompts.ts";
 import jiti from "/Users/ivan.pan/.asdf/installs/nodejs/26.8.2/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/jiti/lib/jiti.mjs";
@@ -114,13 +114,13 @@ test("renders and controls the Jira issue overlay", () => {
 test("renders compact search rows and rejects unknown envelopes", () => {
 	assert.match(formatSearchResult({ data: { items: [{ ...issue, status: { name: "Open" }, updated: "2026-09-19" }] } }), /Open/);
 	assert.throws(() => formatSearchResult({ data: {} }), JiraOutputError);
-	assert.match(formatMutationResult("assign", { data: { item: issue } }), /Assigned.*PROJ-123/);
+	assert.match(formatMutationResult("update", { data: { item: issue } }), /Updated.*PROJ-123/);
 	assert.match(formatMutationResult("update", issue), /Updated.*PROJ-123/);
 });
 
 test("builds fixed JSON commands with no site override", () => {
 	assert.deepEqual(buildSearchArgs("assignee = currentUser()"), ["jira", "workitem", "query", "--jql", "assignee = currentUser()", "--limit", "20", "-o", "json", "--output-summary", "none"]);
-	assert.deepEqual(buildAssignArgs("PROJ-123", "me"), ["jira", "workitem", "update", "--id", "PROJ-123", "--assignee", "me", "-o", "json", "--output-summary", "none"]);
+	assert.equal(parseJiraCommand("assign PROJ-123").action, "help");
 	assert.deepEqual(buildViewArgs("THB-8149").slice(-4), ["-o", "json", "--output-summary", "none"]);
 	assert.equal(buildCreateArgs({ project: "PROJ", type: "Task", summary: "S", description: "D" }).includes("--site"), false);
 });
