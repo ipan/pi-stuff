@@ -1,3 +1,4 @@
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
@@ -16,12 +17,26 @@ export function defaultPlanPath(now: Date): string {
 	return `docs/plans/${utcDate(now)}-plan.md`;
 }
 
+function isInsideWorkspace(workspace: string, candidate: string): boolean {
+	const fromWorkspace = relative(workspace, candidate);
+	return Boolean(fromWorkspace) && fromWorkspace !== ".." && !fromWorkspace.startsWith(`..${sep}`) && !isAbsolute(fromWorkspace);
+}
+
 export function resolvePlanPath(cwd: string, pathArgument: string, now: Date): string {
 	const requested = pathArgument.trim() || defaultPlanPath(now);
 	if (isAbsolute(requested)) throw new Error("Plan path must stay inside the workspace.");
 	const target = resolve(cwd, requested);
-	const fromWorkspace = relative(cwd, target);
-	if (!fromWorkspace || fromWorkspace === ".." || fromWorkspace.startsWith(`..${sep}`) || isAbsolute(fromWorkspace)) {
+	if (!isInsideWorkspace(cwd, target)) throw new Error("Plan path must stay inside the workspace.");
+
+	let existingAncestor = target;
+	while (!existsSync(existingAncestor)) {
+		const parent = dirname(existingAncestor);
+		if (parent === existingAncestor) throw new Error("Plan path must stay inside the workspace.");
+		existingAncestor = parent;
+	}
+	const canonicalWorkspace = realpathSync(cwd);
+	const canonicalAncestor = realpathSync(existingAncestor);
+	if (canonicalAncestor !== canonicalWorkspace && !isInsideWorkspace(canonicalWorkspace, canonicalAncestor)) {
 		throw new Error("Plan path must stay inside the workspace.");
 	}
 	return target;

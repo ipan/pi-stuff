@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -85,13 +85,29 @@ const {
   writePlanFile,
 } = await import("./plan.ts");
 
-test("uses a deterministic in-workspace default and rejects traversal", () => {
-  const cwd = "/tmp/project";
+test("uses a deterministic in-workspace default and rejects traversal", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "pi-plan-path-"));
   const now = new Date("2026-09-22T12:00:00Z");
-  assert.equal(defaultPlanPath(now), "docs/plans/2026-09-22-plan.md");
-  assert.equal(resolvePlanPath(cwd, "", now), "/tmp/project/docs/plans/2026-09-22-plan.md");
-  assert.throws(() => resolvePlanPath(cwd, "../escape.md", now), /inside the workspace/);
-  assert.throws(() => resolvePlanPath(cwd, "/tmp/escape.md", now), /inside the workspace/);
+  try {
+    assert.equal(defaultPlanPath(now), "docs/plans/2026-09-22-plan.md");
+    assert.equal(resolvePlanPath(cwd, "", now), join(cwd, "docs/plans/2026-09-22-plan.md"));
+    assert.throws(() => resolvePlanPath(cwd, "../escape.md", now), /inside the workspace/);
+    assert.throws(() => resolvePlanPath(cwd, "/tmp/escape.md", now), /inside the workspace/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("rejects an export whose existing parent symlink resolves outside the workspace", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "pi-plan-workspace-"));
+  const outside = await mkdtemp(join(tmpdir(), "pi-plan-outside-"));
+  try {
+    await symlink(outside, join(cwd, "docs"));
+    assert.throws(() => resolvePlanPath(cwd, "docs/plans/escaped.md", new Date("2026-09-22T12:00:00Z")), /inside the workspace/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
 });
 
 test("renders a proposal as a plan document and selects the latest assistant response", () => {
