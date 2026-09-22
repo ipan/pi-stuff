@@ -24,6 +24,7 @@ Resources live in conventional directories and are declared in the `pi` key of
   detached so the agent keeps control; add `--wait` to block until the editor
   closes.
 - [`plan-mode`](extensions/plan-mode/) - session-scoped read-only planning and explicit plan export; see [Plan mode](#plan-mode).
+- [`review.ts`](extensions/review.ts) - `/review` reviews a pull request, branch, commit, uncommitted changes, or selected paths; `/end-review` returns from a review session. Originally authored by [Armin Ronacher](https://github.com/mitsuhiko) and imported from [agent-stuff](https://github.com/mitsuhiko/agent-stuff).
 - [`jira`](extensions/jira/) - `/jira` manages Jira Cloud work items through
   the locally configured `twg` OAuth session. Use `/jira PROJ-123` to open a
   scrollable TUI view (60% terminal height; mouse wheel scrolls the description,
