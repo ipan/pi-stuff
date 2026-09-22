@@ -18,9 +18,12 @@ test("routes an issue key shorthand and supported verbs", () => {
 	assert.deepEqual(parseJiraCommand("search open bugs"), { action: "search", text: "open bugs" });
 	assert.deepEqual(parseJiraCommand("irs-66465"), { action: "view", key: "IRS-66465" });
 	assert.deepEqual(parseJiraCommand("create ENG"), { action: "create", project: "ENG" });
+	assert.deepEqual(parseJiraCommand("create PROJ based on the current design"), { action: "create", project: "PROJ", instruction: "based on the current design" });
+	assert.deepEqual(parseJiraCommand("create based on the current design"), { action: "create", instruction: "based on the current design" });
 	assert.deepEqual(parseJiraCommand("update PROJ-123"), { action: "update", key: "PROJ-123" });
+	assert.deepEqual(parseJiraCommand("update PROJ-1234 update based on the latest change"), { action: "update", key: "PROJ-1234", instruction: "update based on the latest change" });
 	assert.deepEqual(parseJiraCommand("comment PROJ-123"), { action: "comment", key: "PROJ-123" });
-	assert.deepEqual(parseJiraCommand("assign PROJ-123"), { action: "assign", key: "PROJ-123" });
+	assert.deepEqual(parseJiraCommand("comment PROJ-1234 summarize `PROJ-99`"), { action: "comment", key: "PROJ-1234", instruction: "summarize `PROJ-99`" });
 });
 
 test("empty, help, unsupported, and malformed shorthand route to help", () => {
@@ -30,6 +33,9 @@ test("empty, help, unsupported, and malformed shorthand route to help", () => {
 	assert.equal(isIssueKey("PROJ-123"), true);
 	assert.equal(isIssueKey("PROJ-"), false);
 	assert.match(JIRA_HELP, /\/jira search <natural-language request>/);
+	assert.match(JIRA_HELP, /\/jira create \[PROJECT\] <instruction>/);
+	assert.match(JIRA_HELP, /\/jira update \[PROJ-123\] <instruction>/);
+	assert.match(JIRA_HELP, /\/jira comment \[PROJ-123\] <instruction>/);
 });
 
 const issue = {
