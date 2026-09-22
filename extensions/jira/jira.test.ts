@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { JIRA_HELP, isIssueKey, parseJiraCommand } from "./parser.ts";
 import { JiraOutputError, formatMutationResult, formatSearchResult, formatViewResult, parseViewResult } from "./jira-output.ts";
 import { TwgError, buildAssignArgs, buildCreateArgs, buildSearchArgs, buildUpdateArgs, buildViewArgs, createTwgClient } from "./twg.ts";
-import { ModelOutputError, convertNaturalLanguageToJql, inferCreateFields } from "./inference.ts";
+import { ModelOutputError, convertNaturalLanguageToJql, draftComment, draftCreateFields, draftUpdateFields, inferCreateFields } from "./inference.ts";
 import { collectCreateDraft, collectUpdateDraft } from "./prompts.ts";
 import jiti from "/Users/ivan.pan/.asdf/installs/nodejs/26.8.2/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/jiti/lib/jiti.mjs";
 
@@ -138,6 +138,24 @@ test("returns only high-confidence create inference fields", async () => {
 test("requires exact JSON JQL output", async () => {
 	await assert.rejects(() => convertNaturalLanguageToJql("my bugs", async () => "```json\n{}\n```"), ModelOutputError);
 	await assert.rejects(() => convertNaturalLanguageToJql("my bugs", async () => "{\"jql\":\"\"}"), ModelOutputError);
+});
+
+const modelJson = (value: unknown) => async () => JSON.stringify(value);
+test("accepts a complete create proposal and puts the instruction in the prompt", async () => {
+	let prompt = "";
+	const proposal = await draftCreateFields({ instruction: "based on the current design", session: "user: Design accepted" }, async (input) => {
+		prompt = input;
+		return JSON.stringify({ project: "PROJ", type: "Task", summary: "Implement design", description: "Build the approved design.", rationale: "Matches the accepted design." });
+	});
+	assert.equal(proposal.summary, "Implement design");
+	assert.match(prompt, /based on the current design/);
+	assert.match(prompt, /user: Design accepted/);
+});
+
+test("rejects untrusted or incomplete update and comment proposals", async () => {
+	await assert.rejects(() => draftUpdateFields({ instruction: "update it", session: "", issue: "PROJ-1" }, modelJson({ summary: "x", transition: "Done", rationale: "x" })), ModelOutputError);
+	await assert.rejects(() => draftComment({ instruction: "comment", session: "", issue: "PROJ-1" }, modelJson({ body: "", rationale: "x" })), ModelOutputError);
+	await assert.rejects(() => draftComment({ instruction: "comment", session: "", issue: "PROJ-1" }, async () => "Here is JSON: {}"), ModelOutputError);
 });
 
 const scriptedUi = (answers: Array<string | boolean | undefined>) => ({ input: async (_title: string, initial = "") => answers.shift() as string | undefined ?? initial, editor: async (_title: string, initial = "") => answers.shift() as string | undefined ?? initial, select: async () => answers.shift() as string | undefined, confirm: async () => answers.shift() as boolean | undefined, notify: () => {} });

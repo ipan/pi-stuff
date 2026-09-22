@@ -34,6 +34,16 @@ export type UpdateDraft = {
 	sprint?: string;
 };
 
+export type JiraDraftContext = {
+	instruction: string;
+	session: string;
+	issue?: string;
+};
+
+export type CreateDraftProposal = CreateDraft & { rationale: string };
+export type UpdateDraftProposal = Omit<UpdateDraft, "key"> & { rationale: string };
+export type CommentDraftProposal = { body: string; rationale: string };
+
 export type ModelJson = (prompt: string) => Promise<string>;
 
 export type TwgRunner = (
