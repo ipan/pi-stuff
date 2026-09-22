@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { relative } from "node:path";
 import {
 	PLAN_MODE_STATE_TYPE,
 	PLAN_SAFE_TOOLS,
@@ -8,6 +9,7 @@ import {
 	restorePlanModeState,
 	type PlanModeState,
 } from "./state.ts";
+import { latestAssistantText, renderPlanMarkdown, resolvePlanPath, writePlanFile } from "./plan.ts";
 
 export const PLAN_MODE_BLOCK_REASON = "Plan mode is active: workspace mutation is disabled. Use /plan off before editing or running shell commands.";
 
@@ -38,7 +40,7 @@ function updateStatus(ctx: ExtensionContext, enabled: boolean): void {
 }
 
 function notify(ctx: ExtensionContext, message: string, level: "info" | "warning" = "info"): void {
-	if (ctx.hasUI) ctx.ui.notify(message, level);
+	ctx.ui.notify(message, level);
 }
 
 export default function (pi: ExtensionAPI): void {
@@ -92,8 +94,45 @@ export default function (pi: ExtensionAPI): void {
 
 	pi.registerCommand("save-plan", {
 		description: "Save the latest proposal as a Markdown plan",
-		handler: async (_args, ctx) => {
-			notify(ctx, "Plan export is not available until plan saving is enabled.", "warning");
+		handler: async (args, ctx) => {
+			if (!ctx.hasUI) {
+				notify(ctx, "Plan export requires an interactive confirmation.", "warning");
+				return;
+			}
+
+			const now = new Date();
+			let target: string;
+			try {
+				target = resolvePlanPath(ctx.cwd, args, now);
+			} catch (error) {
+				notify(ctx, error instanceof Error ? error.message : "Unable to resolve plan path.", "warning");
+				return;
+			}
+
+			const proposal = latestAssistantText(ctx.sessionManager.getBranch());
+			if (!proposal) {
+				notify(ctx, "No assistant proposal is available to save.", "warning");
+				return;
+			}
+			const edited = await ctx.ui.editor("Save plan", proposal);
+			if (edited === undefined) return;
+
+			let content: string;
+			try {
+				content = renderPlanMarkdown(edited, now);
+			} catch (error) {
+				notify(ctx, error instanceof Error ? error.message : "Unable to render plan.", "warning");
+				return;
+			}
+
+			const displayPath = relative(ctx.cwd, target);
+			if (!await ctx.ui.confirm("Save plan?", `Write ${displayPath}?`)) return;
+			try {
+				await writePlanFile(target, content);
+				notify(ctx, `Plan saved to ${displayPath}.`);
+			} catch (error) {
+				notify(ctx, error instanceof Error ? error.message : "Unable to save plan.", "warning");
+			}
 		},
 	});
 
