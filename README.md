@@ -16,6 +16,7 @@ Resources live in conventional directories and are declared in the `pi` key of
 
 ## Extensions
 
+- [`btw.ts`](extensions/btw.ts) - `/btw` opens a separate, context-aware side-chat overlay for focused questions, planning, debugging, and quick exploration. `/btw-edit` enables file editing only for an explicitly requested change; the side thread can be summarized back into the main conversation.
 - [`diff.ts`](extensions/diff.ts) - `/diff` opens a GitHub-style viewer for staged and unstaged tracked changes.
 - [`edit.ts`](extensions/edit.ts) - `/edit recent` or `/edit @path...` opens files and folders in `$EDITOR` from the current terminal.
 - [`zed.ts`](extensions/zed.ts) - `/zed` opens the current session working
@@ -41,6 +42,13 @@ Resources live in conventional directories and are declared in the `pi` key of
 Load `extensions/plan-mode/index.ts` (or install this package) and use `/plan`, `/plan on`, `/plan off`, or `Ctrl+Shift+P` to control the session-scoped mode. Start a session in it with `pi --plan`.
 
 Plan mode leaves only `read`, `grep`, `find`, and `ls` active. It blocks all LLM mutation tools and every user shell command (`!` and `!!`); it does not try to infer whether a shell command is safe. Use `/save-plan [docs/plans/name.md]` to edit and explicitly confirm a Markdown export. The export refuses paths outside the workspace and refuses to overwrite an existing file.
+
+## Skills
+
+- [`github`](skills/github/SKILL.md) - use the `gh` CLI for GitHub issues, pull requests, Actions runs, and API queries.
+- [`native-web-search`](skills/native-web-search/SKILL.md) - run concise web research with source URLs through the native search helper.
+- [`summarize`](skills/summarize/SKILL.md) - convert URLs and local documents such as PDF, DOCX, and HTML into Markdown, optionally with a summary.
+- [`uv`](skills/uv/SKILL.md) - use `uv` for Python scripts, dependencies, and virtual-environment-free workflows instead of `pip` or `venv`.
 
 ## Adding a resource
 
